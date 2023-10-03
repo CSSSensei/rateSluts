@@ -278,7 +278,7 @@ async def get_note_main(message: Message, state: FSMContext):
     add_note(get_last_commit(message.from_user.id), message.text)
     await message.answer(
         text=f'Охуенная заметка: <b><i>{message.text}</i></b>. Сообщение отправлено всем участникам <a href="https://t.me/+D_c0v8cHybY2ODQy">банды инцелов</a>',
-        reply_markup=basic_keyboard)
+        disable_web_page_preview=True, reply_markup=basic_keyboard)
     await send_photo_to_users(message.from_user.id, get_last_commit(message.from_user.id))
     await state.clear()
     add_current_state(message.from_user.id, 0, message.from_user.username)
