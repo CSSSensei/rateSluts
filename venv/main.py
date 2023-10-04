@@ -214,6 +214,17 @@ async def settings(message: Message, state: FSMContext):
     await state.set_state(FSMFillForm.verified)
 
 
+@dp.message(Command(commands='help'))
+async def help(message: Message, state: FSMContext):
+    result = check_id(message.from_user.id, message.from_user.username)
+    if not result[0]:
+        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
+        await state.set_state(FSMFillForm.inserting_password)
+        return
+    await message.answer(text='Прсто скинь мне любое фото, и оно будет отправлено всем участникам <a href="https://t.me/+D_c0v8cHybY2ODQy">банды инцелов</a>. Либо просто напиши "Разослать фото".\nКнопка "Статистика по отправленным фото" покажет тебе график всех средних значений оценок твоих фото.',
+        disable_web_page_preview=True, reply_markup=basic_keyboard)
+
+
 @dp.message(Command(commands='get_users_info_db'))
 async def send_users_db(message: Message, state: FSMContext):
     txt = map(str, get_usersinfo_db())
