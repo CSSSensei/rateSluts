@@ -156,7 +156,13 @@ async def filter_rates(callback: CallbackQuery,
         add_current_state(callback.from_user.id, 0, callback.from_user.username)
         votes = get_votes(num)
         if len(votes.keys()) == len(get_users()) and flag:
+
             avg = sum(votes.values()) / len(votes.keys())
+            extra = ''
+            if avg == 0:
+                extra = '<b>🚨 Осторожно!🚨\nУберите от экранов детей и людей с тонкой душевной организацией. Данное фото может вас шокировать\n\n</b>'
+            if avg == 11:
+                extra = '<b>😍 Все участники банды инцелов оценили фото на 11 😍</b>\n\n'
             avg_str = '{:.2f}'.format(avg)
             user_rates = ''
             for key, value in votes.items():
@@ -164,7 +170,7 @@ async def filter_rates(callback: CallbackQuery,
             rounded = round(avg)
             note_str = get_note_sql(num)
             note_str = f': <b><i>{get_note_sql(num)}</i></b>\n\n' if note_str is not None else '\n\n'
-            txt = f'Автор пикчи <b>@{get_origin(num)}</b>' + note_str + "Оценки инцелов:\n" + user_rates + '\n' f'Общая оценка: <b>{avg_str}</b>' + f'\n<i>#{rate2[rounded].replace(" ", "_")}</i>'
+            txt = extra + f'Автор пикчи <b>@{get_origin(num)}</b>' + note_str + "Оценки инцелов:\n" + user_rates + '\n' f'Общая оценка: <b>{avg_str}</b>' + f'\n<i>#{rate2[rounded].replace(" ", "_")}</i>'
             await bot.send_photo(chat_id=channel_id, photo=get_photo_id_by_id(num), caption=txt)
         q = get_queue(callback.from_user.id)
         if len(q) == 0:
