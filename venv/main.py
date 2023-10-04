@@ -215,14 +215,14 @@ async def settings(message: Message, state: FSMContext):
 
 
 @dp.message(Command(commands='get_users_info_db'))
-async def settings(message: Message, state: FSMContext):
+async def send_users_db(message: Message, state: FSMContext):
     txt = map(str, get_usersinfo_db())
     txt = '\n'.join(txt)
     await message.answer(text=txt, reply_markup=basic_keyboard)
 
 
 @dp.message(Command(commands='get_sluts_db'))
-async def settings(message: Message, state: FSMContext):
+async def send_sluts_db(message: Message, state: FSMContext):
     txt = map(str, get_sluts_db())
     txt = '\n'.join(txt)
     for i in range((len(txt) + 4096) // 4096):
@@ -230,7 +230,7 @@ async def settings(message: Message, state: FSMContext):
 
 
 @dp.message(F.text == 'яинцел', StateFilter(FSMFillForm.inserting_password))
-async def get_password(message: Message, state: FSMContext):
+async def get_verified(message: Message, state: FSMContext):
     set_verified(id=message.from_user.id)
     await message.answer(
         text='Легенда! Теперь ты в нашей банде. Тебе доступны команды отправки фото. Также тебе будут присылаться фото от других пользователей для оценки',
@@ -249,7 +249,7 @@ async def wrong_password(message: Message, state: FSMContext):
 
 
 @dp.message(F.photo, StateFilter(FSMFillForm.sending_photo))
-async def get_photo(message: Message, state: FSMContext):
+async def get_photo_by_button(message: Message, state: FSMContext):
     file_id = message.photo[-1].file_id
     last_num = get_last()
     add_photo_id(last_num + 1, file_id, message.from_user.username)  # этот идентификатор нужно где-то сохранить
@@ -261,14 +261,14 @@ async def get_photo(message: Message, state: FSMContext):
 
 
 @dp.message(F.text == 'Не отправлять фото', StateFilter(FSMFillForm.sending_photo))
-async def send_photo(message: Message, state: FSMContext):
+async def cancel_sending(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(text='Ты вышел из меню отправки фото', reply_markup=basic_keyboard)
     add_current_state(message.from_user.id, 0, message.from_user.username)
 
 
 @dp.message(~F.photo, StateFilter(FSMFillForm.sending_photo))
-async def get_photo(message: Message, state: FSMContext):
+async def invalid_type_photo(message: Message, state: FSMContext):
     await message.answer(text='Это похоже на фото, долбоёб?', reply_markup=keyboard3)
 
 
@@ -293,7 +293,7 @@ async def get_no_notes(message: Message, state: FSMContext):
 
 
 @dp.message(~F.text, StateFilter(FSMFillForm.inserting_comment))
-async def get_no_notes(message: Message, state: FSMContext):
+async def invalid_type_note(message: Message, state: FSMContext):
     await message.answer(text='Это похоже на текст для заметки, долбоёб?',
                          reply_markup=keyboard2)
 
@@ -327,8 +327,8 @@ async def send_photo(message: Message, state: FSMContext):
 
 
 @dp.message(StateFilter(FSMFillForm.rating))
-async def default_photo(message: Message, state: FSMContext):
-    await message.answer(text='Поставь оценку, сука!')
+async def remember_to_rate(message: Message, state: FSMContext):
+    await message.an swer(text='Поставь оценку, сука!')
 
 
 @dp.message(F.photo)
@@ -378,18 +378,18 @@ async def u_r_wellcome(message):
 @dp.message(
     lambda message: message.text is not None and (
             message.text.lower() == 'иди нахуй' or message.text.lower() == 'пошел нахуй' or message.text.lower() == 'иди на хуй'))
-async def u_r_wellcome(message):
+async def fuckoff(message):
     await bot.send_sticker(chat_id=message.chat.id,
                            sticker='CAACAgEAAxkBAAEKSrVlAiPwEKrocvOADTQWgKGACLGGlwAChAEAAnY3dj_hnFOGe-uonzAE')
 
 
 @dp.message(lambda message: message.text is not None and message.text.lower() == 'я гей')
-async def u_r_wellcome(message):
+async def ik(message):
     await message.answer('я знаю')
 
 
 @dp.message()
-async def process_name_command(message: Message):
+async def every_message(message: Message):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
         await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
