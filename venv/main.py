@@ -328,7 +328,7 @@ async def send_photo(message: Message, state: FSMContext):
 
 @dp.message(StateFilter(FSMFillForm.rating))
 async def remember_to_rate(message: Message, state: FSMContext):
-    await message.an swer(text='Поставь оценку, сука!')
+    await message.answer(text='Поставь оценку, сука!')
 
 
 @dp.message(F.photo)
