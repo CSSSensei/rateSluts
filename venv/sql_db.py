@@ -122,6 +122,10 @@ def get_current_state(id):
     state_photo: int = cursor.fetchone()[0]
     return state_photo
 
+def get_usersinfo_db():
+    cursor.execute("SELECT * FROM users_info")
+    rows = cursor.fetchall()
+    return rows
 
 def print_db():
     cursor.execute("SELECT * FROM users_info")

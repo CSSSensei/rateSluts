@@ -53,7 +53,10 @@ def get_origin(num):
 
 def get_votes(num):
     cursor.execute("SELECT votes FROM sluts_info WHERE id=?", (num,))
-    votes: Dict = json.loads(cursor.fetchone()[0])
+    votes_tuple = cursor.fetchone()[0]
+    if votes_tuple is None:
+        return {}
+    votes: Dict = json.loads(votes_tuple)
     return votes
 
 
@@ -80,6 +83,10 @@ def len_photos_by_username(username):
     ln = cursor.fetchall()
     return len(ln)
 
+def get_sluts_db():
+    cursor.execute("SELECT * FROM sluts_info")
+    rows = cursor.fetchall()
+    return rows
 
 def print_db():
     cursor.execute("SELECT * FROM sluts_info")

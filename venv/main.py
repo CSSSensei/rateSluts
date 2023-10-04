@@ -34,9 +34,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv, find_dotenv
 from aiogram.client.session.aiohttp import AiohttpSession
 from sql_db import check_id, reduce_attempts, set_verified, add_girlphoto, get_users, get_last_commit, \
-    add_current_state, get_current_state, add_to_queue, delete_from_queue, get_queue
+    add_current_state, get_current_state, add_to_queue, delete_from_queue, get_queue, get_usersinfo_db
 from sql_photos import get_last, add_photo_id, add_rate, add_note, get_photo_id_by_id, get_note_sql, get_votes, \
-    get_origin, max_photo_id_among_all, len_photos_by_username, max_photo_id_by_username
+    get_origin, max_photo_id_among_all, len_photos_by_username, max_photo_id_by_username, get_sluts_db
 from graphics import get_statistics
 
 load_dotenv(find_dotenv())
@@ -144,12 +144,18 @@ async def filter_rates(callback: CallbackQuery,
     num = callback_data.photo_id
     await callback.answer(text=rate[callback_data.r])
     mailing = callback_data.mailing
+    votes = get_votes(num)
+    flag = True
+    if mailing and len(votes.keys()) == len(get_users()):
+        flag = False  # FLag - индикатор, который отвечает за публикацию поста в канал
     add_rate(num, callback.from_user.username, callback_data.r)
     delete_from_queue(callback.from_user.id, num)
 
     if mailing:
+        await callback.message.delete()
+        add_current_state(callback.from_user.id, 0, callback.from_user.username)
         votes = get_votes(num)
-        if len(votes.keys()) == len(get_users()):
+        if len(votes.keys()) == len(get_users()) and flag:
             avg = sum(votes.values()) / len(votes.keys())
             avg_str = '{:.2f}'.format(avg)
             user_rates = ''
@@ -157,12 +163,9 @@ async def filter_rates(callback: CallbackQuery,
                 user_rates += f'@{key}: <i>{value}</i>\n'
             rounded = round(avg)
             note_str = get_note_sql(num)
-            note_str = f': <b><i>"{get_note_sql(num)}"</i></b>\n\n' if note_str is not None else '\n\n'
-            txt = f'Автор пикчи <b>@{get_origin(num)}</b>' + note_str + "Оценки инцелов:\n" + user_rates + '\n' f'Общая оценка: <b>{avg_str}</b>' + f'\n#{rate2[rounded].replace(" ", "_")}'
+            note_str = f': <b><i>{get_note_sql(num)}</i></b>\n\n' if note_str is not None else '\n\n'
+            txt = f'Автор пикчи <b>@{get_origin(num)}</b>' + note_str + "Оценки инцелов:\n" + user_rates + '\n' f'Общая оценка: <b>{avg_str}</b>' + f'\n<i>#{rate2[rounded].replace(" ", "_")}</i>'
             await bot.send_photo(chat_id=channel_id, photo=get_photo_id_by_id(num), caption=txt)
-        await callback.message.delete()
-        add_current_state(callback.from_user.id, 0, callback.from_user.username)
-        max_photo = max_photo_id_among_all(callback.from_user.username)
         q = get_queue(callback.from_user.id)
         if len(q) == 0:
             return
@@ -175,7 +178,8 @@ async def filter_rates(callback: CallbackQuery,
 
     await callback.message.edit_text(f'Ты поставил оценку {callback_data.r} {emoji[callback_data.r]}')
     await bot.send_message(chat_id=callback.from_user.id,
-                           text='Введи заметку, которая будет видна по окончании голосования', reply_markup=keyboard2)
+                           text='Введи заметку, которая будет видна по окончании голосования, либо нажми "Оставить без комментариев"',
+                           reply_markup=keyboard2)
     await state.set_state(FSMFillForm.inserting_comment)
 
 
@@ -204,6 +208,21 @@ async def settings(message: Message, state: FSMContext):
     await state.set_state(FSMFillForm.verified)
 
 
+@dp.message(Command(commands='get_users_info_db'))
+async def settings(message: Message, state: FSMContext):
+    txt = map(str, get_usersinfo_db())
+    txt = '\n'.join(txt)
+    await message.answer(text=txt, reply_markup=basic_keyboard)
+
+
+@dp.message(Command(commands='get_sluts_db'))
+async def settings(message: Message, state: FSMContext):
+    txt = map(str, get_sluts_db())
+    txt = '\n'.join(txt)
+    for i in range((len(txt) + 4096) // 4096):
+        await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
+
+
 @dp.message(F.text == 'яинцел', StateFilter(FSMFillForm.inserting_password))
 async def get_password(message: Message, state: FSMContext):
     set_verified(id=message.from_user.id)
@@ -219,7 +238,7 @@ async def wrong_password(message: Message, state: FSMContext):
     if attempts > 0:
         await message.answer(text=f'Неверный пароль. Осталось попыток: {attempts}')
     else:
-        await message.answer(text='Ты ввел неверный пароль 5 раз. Вам ограничен доступ к этому боту')
+        await message.answer(text='Ты ввел неверный пароль 5 раз. Иди на хуй, дружок')
         await state.set_state(FSMFillForm.banned)
 
 
@@ -293,10 +312,10 @@ async def urbanned(message: Message, state: FSMContext):
 async def send_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Введите пароль', reply_markup=ReplyKeyboardRemove())
+        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
         await state.set_state(FSMFillForm.inserting_password)
         return
-    await message.answer(text='Пришлите фото', reply_markup=keyboard3)
+    await message.answer(text='Пришли фото', reply_markup=keyboard3)
     await state.set_state(FSMFillForm.sending_photo)
     add_current_state(message.from_user.id, -1, message.from_user.username)
 
@@ -310,7 +329,7 @@ async def default_photo(message: Message, state: FSMContext):
 async def default_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Введите пароль', reply_markup=ReplyKeyboardRemove())
+        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
         await state.set_state(FSMFillForm.inserting_password)
         return
     file_id = message.photo[-1].file_id
@@ -327,7 +346,7 @@ async def default_photo(message: Message, state: FSMContext):
 async def stat_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Введите пароль', reply_markup=ReplyKeyboardRemove())
+        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
         await state.set_state(FSMFillForm.inserting_password)
         return
     if len_photos_by_username(message.from_user.username) > 0:
@@ -367,7 +386,7 @@ async def u_r_wellcome(message):
 async def process_name_command(message: Message):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Введите пароль', reply_markup=ReplyKeyboardRemove())
+        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
         await state.set_state(FSMFillForm.inserting_password)
         return
     await message.answer(text='я не понимаю о чем ты', reply_markup=basic_keyboard)
