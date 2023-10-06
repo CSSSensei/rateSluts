@@ -85,7 +85,8 @@ def reduce_attempts(id: int):
 
 
 def set_verified(id: int()):
-    cursor.execute("UPDATE users_info SET verified=?, banned=?, attempts=? WHERE id=?", (True, False, 5, id))
+    cursor.execute("UPDATE users_info SET verified=?, banned=?, attempts=?, current=? WHERE id=?",
+                   (True, False, 0, 0, id))
     conn.commit()
 
 
@@ -96,17 +97,25 @@ def get_users():
 
 
 def add_girlphoto(id, num):
-    cursor.execute("SELECT photos_ids FROM users_info WHERE id=?", (id,))
-    rows = cursor.fetchone()[0]
-    rows = '' if rows is None else rows + ', '
-    cursor.execute("UPDATE users_info SET photos_ids=? WHERE id=?", (rows + str(num), id,))
+    cursor.execute("UPDATE users_info SET photos_ids=? WHERE id=?", (str(num), id,))
     conn.commit()
 
 
 def get_last_commit(id):
     cursor.execute("SELECT photos_ids FROM users_info WHERE id=?", (id,))
-    rows = list(map(int, cursor.fetchone()[0].split(',')))
+    rows = cursor.fetchone()[0]
     return int(rows[-1])
+
+
+def insert_last_rate(id, num):
+    cursor.execute("UPDATE users_info SET attempts=? WHERE id=?", (num, id,))
+    conn.commit()
+
+
+def get_last_rate(id):
+    cursor.execute("SELECT attempts FROM users_info WHERE id=?", (id,))
+    rows = cursor.fetchone()[0]
+    return rows
 
 
 def add_current_state(id, num, username=0):
@@ -117,15 +126,37 @@ def add_current_state(id, num, username=0):
     conn.commit()
 
 
+def get_usernane_by_id(id):
+    cursor.execute("SELECT username FROM users_info WHERE id=?", (id,))
+    un = cursor.fetchone()[0]
+    return str(un)
+
+
+def get_ban(id):
+    cursor.execute("UPDATE users_info SET banned=?, verified=? WHERE id=?", (True, False, id,))
+    conn.commit()
+
+
 def get_current_state(id):
     cursor.execute("SELECT current FROM users_info WHERE id=?", (id,))
     state_photo: int = cursor.fetchone()[0]
     return state_photo
 
+
+def delete_row(username):
+    cursor.execute("DELETE FROM users_info WHERE username=?", ('newerry',))
+    conn.commit()
+    if cursor.rowcount == 0:
+        return 0
+    return 1
+    
+
+
 def get_usersinfo_db():
     cursor.execute("SELECT * FROM users_info")
     rows = cursor.fetchall()
     return rows
+
 
 def print_db():
     cursor.execute("SELECT * FROM users_info")
