@@ -272,6 +272,7 @@ async def send_users_db_func(message: Message, state: FSMContext):
     weekly_resume(message.from_user.id)
     await message.answer(text='Еженедельная рассылка тир-листа возобновлена', reply_markup=basic_keyboard)
 
+
 @dp.message(Command(commands='get_ban'))
 async def ban_user(message: Message, state: FSMContext):
     get_ban(message.from_user.id)
@@ -426,7 +427,7 @@ async def stat_photo(message: Message, state: FSMContext):
         await state.set_state(FSMFillForm.inserting_password)
         return
     last_rate = get_last_rate(message.from_user.id)
-    if last_rate == 0 or last_rate==5:
+    if last_rate == 0 or last_rate == 5:
         message.answer(text='Ты не оценивал чужих фото', reply_markup=basic_keyboard)
         return
     await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(last_rate),
@@ -469,6 +470,7 @@ async def download():
     f_path = f.file_path
     await bot.download_file(f_path, "test.jpg")
 
+
 async def weekly_tierlist():
     if get_weekly(972753303):
         d = get_weekly_db()
@@ -488,8 +490,8 @@ async def weekly_tierlist():
         bot.send_document(document=photo, chat_id=channel_id, caption='<b>Еженедельный тир лист</b>')
         os.remove("tier_list.png")
         clear_db()
-    
-    
+
+
 async def notify():
     for user in get_users():
         q = get_queue(user)
@@ -498,7 +500,8 @@ async def notify():
             continue
         if len(q) == 0:
             continue
-        await bot.send_message(chat_id=user, caption='Напоминание:\n\n<b>оцени фото, тварь 🤬</b>', reply_markup=basic_keyboard)
+        await bot.send_message(chat_id=user, caption='Напоминание:\n\n<b>оцени фото, тварь 🤬</b>',
+                               reply_markup=basic_keyboard)
 
 
 async def main():
