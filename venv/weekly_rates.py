@@ -87,7 +87,7 @@ def weekly_resume(id):
 
 
 def print_db(n=2):
-    if n == 0 or n ==2:
+    if n == 0 or n == 2:
         cursor.execute("SELECT * FROM weekly")
         rows = cursor.fetchall()
         for row in rows:

@@ -68,6 +68,14 @@ def delete_from_queue(id, num):
     conn.commit()
 
 
+def get_id_by_username(un):
+    cursor.execute("SELECT id FROM users_info WHERE username=?", (un,))
+    result = cursor.fetchone()
+    if result is None:
+        return None
+    return result[0]
+
+
 def get_queue(id):
     cursor.execute("SELECT queue FROM users_info WHERE id=?", (id,))
     result = cursor.fetchone()[0]
@@ -126,7 +134,7 @@ def add_current_state(id, num, username=0):
     conn.commit()
 
 
-def get_usernane_by_id(id):
+def get_username_by_id(id):
     cursor.execute("SELECT username FROM users_info WHERE id=?", (id,))
     un = cursor.fetchone()[0]
     return str(un)
@@ -149,7 +157,6 @@ def delete_row(username):
     if cursor.rowcount == 0:
         return 0
     return 1
-    
 
 
 def get_usersinfo_db():

@@ -83,10 +83,12 @@ def len_photos_by_username(username):
     ln = cursor.fetchall()
     return len(ln)
 
+
 def get_sluts_db():
     cursor.execute("SELECT * FROM sluts_info")
     rows = cursor.fetchall()
     return rows
+
 
 def print_db():
     cursor.execute("SELECT * FROM sluts_info")

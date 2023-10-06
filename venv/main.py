@@ -36,7 +36,7 @@ from dotenv import load_dotenv, find_dotenv
 from aiogram.client.session.aiohttp import AiohttpSession
 from sql_db import check_id, reduce_attempts, set_verified, add_girlphoto, get_users, get_last_commit, \
     add_current_state, get_current_state, add_to_queue, delete_from_queue, get_queue, get_usersinfo_db, \
-    get_usernane_by_id, insert_last_rate, get_last_rate, get_ban, delete_row
+    get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username
 from sql_photos import get_last, add_photo_id, add_rate, add_note, get_photo_id_by_id, get_note_sql, get_votes, \
     get_origin, max_photo_id_among_all, len_photos_by_username, max_photo_id_by_username, get_sluts_db
 from graphics import get_statistics
@@ -172,6 +172,18 @@ async def filter_rates(callback: CallbackQuery,
         await callback.message.delete()
         add_current_state(callback.from_user.id, 0, callback.from_user.username)
         votes = get_votes(num)
+        if len(votes.keys()) + 1 == len(get_users()):
+            voted = set(votes.keys())
+            users = set()
+            for i in get_users():
+                users.add(get_username_by_id(i))
+            last_username = next(iter((users - voted)))
+            if last_username is not None and type(last_username) == str and len(last_username) > 0:
+                if get_id_by_username(last_username) is not None:
+                    bot.send_message(
+                        text=f'{last_username}, ебать твой рот, нажми ты эту кнопочку, вся банда инцелов тебя ожидает',
+                        chat_id=get_id_by_username(last_username), reply_markup=basic_keyboard)
+
         if len(votes.keys()) == len(get_users()) and flag:
 
             avg = sum(votes.values()) / len(votes.keys())
