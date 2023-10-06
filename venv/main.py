@@ -181,7 +181,7 @@ async def filter_rates(callback: CallbackQuery,
             if last_username is not None and type(last_username) == str and len(last_username) > 0:
                 if get_id_by_username(last_username) is not None:
                     bot.send_message(
-                        text=f'{last_username}, ебать твой рот, нажми ты эту кнопочку, вся банда инцелов тебя ожидает',
+                        text=f'<b>{last_username}</b>, ебать твой рот, нажми ты эту кнопочку, вся банда инцелов тебя ожидает',
                         chat_id=get_id_by_username(last_username), reply_markup=basic_keyboard)
 
         if len(votes.keys()) == len(get_users()) and flag:
@@ -283,6 +283,16 @@ async def weekly_cancel_func(message: Message, state: FSMContext):
 async def send_users_db_func(message: Message, state: FSMContext):
     weekly_resume(message.from_user.id)
     await message.answer(text='Еженедельная рассылка тир-листа возобновлена', reply_markup=basic_keyboard)
+
+
+@dp.message(Command(commands='send_tier_list'))
+async def send_tier_and_delete(message: Message, state: FSMContext):
+    await weekly_tierlist()
+
+
+@dp.message(Command(commands='send_tier_list_notdel'))
+async def send_tier_list(message: Message, state: FSMContext):
+    await weekly_tierlist(0)
 
 
 @dp.message(Command(commands='get_ban'))
@@ -483,7 +493,7 @@ async def download():
     await bot.download_file(f_path, "test.jpg")
 
 
-async def weekly_tierlist():
+async def weekly_tierlist(delete=1):
     if get_weekly(972753303):
         d = get_weekly_db()
         new_d = {}
@@ -501,7 +511,8 @@ async def weekly_tierlist():
         photo = FSInputFile("tier_list.png")
         bot.send_document(document=photo, chat_id=channel_id, caption='<b>Еженедельный тир лист</b>')
         os.remove("tier_list.png")
-        clear_db()
+        if delete:
+            clear_db()
 
 
 async def notify():
