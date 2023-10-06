@@ -180,8 +180,8 @@ async def filter_rates(callback: CallbackQuery,
             last_username = next(iter((users - voted)))
             if last_username is not None and type(last_username) == str and len(last_username) > 0:
                 if get_id_by_username(last_username) is not None:
-                    bot.send_message(
-                        text=f'<b>{last_username}</b>, ебать твой рот, нажми ты эту кнопочку, вся банда инцелов тебя ожидает',
+                    await bot.send_message(
+                        text=f'<b>{last_username}</b>, ебать твой рот, нажми на кнопку, ты последний такой хуесос',
                         chat_id=get_id_by_username(last_username), reply_markup=basic_keyboard)
 
         if len(votes.keys()) == len(get_users()) and flag:
@@ -260,53 +260,77 @@ async def help(message: Message, state: FSMContext):
 
 @dp.message(Command(commands='get_users_info_db'))
 async def send_users_db(message: Message, state: FSMContext):
-    txt = map(str, get_usersinfo_db())
-    txt = '\n'.join(txt)
-    await message.answer(text=txt, reply_markup=basic_keyboard)
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        txt = map(str, get_usersinfo_db())
+        txt = '\n'.join(txt)
+        await message.answer(text=txt, reply_markup=basic_keyboard)
 
 
 @dp.message(Command(commands='get_weekly_db'))
 async def send_weekly_db(message: Message, state: FSMContext):
-    txt = map(str, get_weekly_db_info())
-    txt = '\n'.join(txt)
-    for i in range((len(txt) + 4096) // 4096):
-        await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        txt = map(str, get_weekly_db_info())
+        txt = '\n'.join(txt)
+        for i in range((len(txt) + 4096) // 4096):
+            await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
 
 
 @dp.message(Command(commands='weekly_off'))
 async def weekly_cancel_func(message: Message, state: FSMContext):
-    weekly_cancel(message.from_user.id)
-    await message.answer(text='Еженедельная рассылка тир-листа отключена', reply_markup=basic_keyboard)
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        weekly_cancel(message.from_user.id)
+        await message.answer(text='Еженедельная рассылка тир листа отключена', reply_markup=basic_keyboard)
 
 
 @dp.message(Command(commands='weekly_on'))
 async def send_users_db_func(message: Message, state: FSMContext):
-    weekly_resume(message.from_user.id)
-    await message.answer(text='Еженедельная рассылка тир-листа возобновлена', reply_markup=basic_keyboard)
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        weekly_resume(message.from_user.id)
+        await message.answer(text='Еженедельная рассылка тир листа возобновлена', reply_markup=basic_keyboard)
 
 
 @dp.message(Command(commands='send_tier_list'))
 async def send_tier_and_delete(message: Message, state: FSMContext):
-    await weekly_tierlist()
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        await message.answer(text='Тир лист был отправлен, БД очищена', reply_markup=basic_keyboard)
+        await weekly_tierlist()
 
 
 @dp.message(Command(commands='send_tier_list_notdel'))
 async def send_tier_list(message: Message, state: FSMContext):
-    await weekly_tierlist(0)
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        await message.answer(text='Тир лист был отправлен, БД сохранена', reply_markup=basic_keyboard)
+        await weekly_tierlist(0)
 
 
 @dp.message(Command(commands='get_ban'))
 async def ban_user(message: Message, state: FSMContext):
     get_ban(message.from_user.id)
     await message.answer(text='Вы исключены из банды инцелов', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(FSMFillForm.banned)
 
 
 @dp.message(Command(commands='get_sluts_db'))
 async def send_sluts_db(message: Message, state: FSMContext):
-    txt = map(str, get_sluts_db())
-    txt = '\n'.join(txt)
-    for i in range((len(txt) + 4096) // 4096):
-        await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        txt = map(str, get_sluts_db())
+        txt = '\n'.join(txt)
+        for i in range((len(txt) + 4096) // 4096):
+            await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
 
 
 @dp.message(F.text == 'яинцел', StateFilter(FSMFillForm.inserting_password))
@@ -450,7 +474,7 @@ async def stat_photo(message: Message, state: FSMContext):
         return
     last_rate = get_last_rate(message.from_user.id)
     if last_rate == 0 or last_rate == 5:
-        message.answer(text='Ты не оценивал чужих фото', reply_markup=basic_keyboard)
+        await message.answer(text='Ты не оценивал чужих фото', reply_markup=basic_keyboard)
         return
     await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(last_rate),
                          reply_markup=get_rates_keyboard(last_rate, 1), caption='Ну давай, переобуйся, тварь')
@@ -484,13 +508,7 @@ async def every_message(message: Message, state: FSMContext):
         await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
         await state.set_state(FSMFillForm.inserting_password)
         return
-    await message.answer(text='я не понимаю о чем ты', reply_markup=basic_keyboard)
-
-
-async def download():
-    f = await bot.get_file(file_id)
-    f_path = f.file_path
-    await bot.download_file(f_path, "test.jpg")
+    await message.answer(text='я не понимаю, о чем ты', reply_markup=basic_keyboard)
 
 
 async def weekly_tierlist(delete=1):
@@ -509,7 +527,7 @@ async def weekly_tierlist(delete=1):
         for i in range(1, cnt):
             os.remove(f"test_{i}.jpg")
         photo = FSInputFile("tier_list.png")
-        bot.send_document(document=photo, chat_id=channel_id, caption='<b>Еженедельный тир лист</b>')
+        await bot.send_document(document=photo, chat_id=channel_id, caption='<b>Еженедельный тир лист ❤️</b>')
         os.remove("tier_list.png")
         if delete:
             clear_db()
