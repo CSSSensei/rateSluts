@@ -112,7 +112,7 @@ def add_girlphoto(id, num):
 def get_last_commit(id):
     cursor.execute("SELECT photos_ids FROM users_info WHERE id=?", (id,))
     rows = cursor.fetchone()[0]
-    return int(rows[-1])
+    return int(rows)
 
 
 def insert_last_rate(id, num):
@@ -174,3 +174,4 @@ def print_db():
 
 if __name__ == '__main__':
     print_db()
+    print(get_last_commit(972753303))

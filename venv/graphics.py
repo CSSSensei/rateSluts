@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import matplotlib.pyplot as plt
+from Color2 import color_calculate
 
 
 def get_statistics(username):
@@ -23,12 +24,28 @@ def get_statistics(username):
         g = json.loads(row[2])
         votes.append(list(g.values())[0])
         averages.append(sum(g.values()) / len(g.keys()))
-    # Создаем график среднего значения
+
+    averages = averages[-200:]
+    colors = [color_calculate(avg) for avg in averages]
+    # Создаем столбчатую диаграмму с разноцветными столбцами
+    if len(averages) >= 100:
+        plt.figure(figsize=(6 * len(averages) / 100, 5))
+
+    plt.bar(range(len(averages)), averages, color=colors, width=1)
+    plt.title(f'@{username}')
+    plt.xlabel('Record Number')
+    plt.ylabel('Average')
+    plt.savefig(f'myplot_{username}.png')
+    # Закрываем соединение с базой данных
+    conn.close()
+    plt.clf()
+
     plt.plot(averages)
     plt.title(f'@{username}')
     plt.xlabel('Record Number')
     plt.ylabel('Average')
-    plt.savefig(f'myplot_{username}.jpg')
-    # Закрываем соединение с базой данных
-    conn.close()
+    plt.savefig(f'myplot_{username}2.png')
     plt.clf()
+
+
+get_statistics('nklnkk')

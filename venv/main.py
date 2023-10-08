@@ -53,6 +53,8 @@ storage: MemoryStorage = MemoryStorage()
 bot: Bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp: Dispatcher = Dispatcher(storage=storage)
 
+states_users = {}
+
 emoji = {
     0: '🤢',
     1: '🤮',
@@ -180,9 +182,11 @@ async def filter_rates(callback: CallbackQuery,
             last_username = next(iter((users - voted)))
             if last_username is not None and type(last_username) == str and len(last_username) > 0:
                 if get_id_by_username(last_username) is not None:
-                    await bot.send_message(
-                        text=f'<b>{last_username}</b>, ебать твой рот, нажми на кнопку, ты последний такой хуесос',
-                        chat_id=get_id_by_username(last_username), reply_markup=basic_keyboard)
+                    if states_users.get(last_username, None) is None or states_users[last_username] + datetime.timedelta(hours=1) < datetime.datetime.now():
+                        await bot.send_message(
+                            text=f'<b>{last_username}</b>, ебать твой рот, нажми на кнопку, ты последний такой хуесос 😡',
+                            chat_id=get_id_by_username(last_username), reply_markup=basic_keyboard)
+                        states_users[last_username] = datetime.datetime.now()
 
         if len(votes.keys()) == len(get_users()) and flag:
 
@@ -218,7 +222,7 @@ async def filter_rates(callback: CallbackQuery,
     await callback.message.edit_text(f'Ты поставил оценку {callback_data.r} {emoji[callback_data.r]}')
     add_current_state(callback.from_user.id, 0, callback.from_user.username)
     await state.clear()
-    send_photo_to_users(callback.from_user.id, num)
+    await send_photo_to_users(callback.from_user.id, num)
 
 
 # Этот хэндлер будет срабатывать на команду "/start"
@@ -468,9 +472,12 @@ async def stat_photo(message: Message, state: FSMContext):
     if len_photos_by_username(message.from_user.username) > 0:
         username = message.from_user.username
         get_statistics(username)
-        photo = FSInputFile(f'myplot_{username}.jpg')
-        await bot.send_photo(photo=photo, chat_id=message.from_user.id)
-        os.remove(f'myplot_{username}.jpg')
+        photo = InputMediaPhoto(f'myplot_{username}.png')
+        photo2 = InputMediaPhoto(f'myplot_{username}2.png')
+        media = [photo, photo2]
+        await bot.send_media_group(media=media, chat_id=message.from_user.id)
+        os.remove(f'myplot_{username}.png')
+        os.remove(f'myplot_{username}2.png')
         await message.answer(
             text=f'Ваше последнее фото оценили {len(get_votes(max_photo_id_by_username(username)).keys())}/{len(get_users())} человек')
     else:
@@ -556,7 +563,7 @@ async def notify():
             continue
         if len(q) == 0:
             continue
-        await bot.send_message(chat_id=user, caption='Напоминание:\n\n<b>оцени фото, тварь 🤬</b>',
+        await bot.send_message(chat_id=user, text='Напоминание:\n\n<b>оцени фото, тварь 🤬</b>',
                                reply_markup=basic_keyboard)
 
 
