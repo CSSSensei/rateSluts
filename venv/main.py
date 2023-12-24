@@ -36,7 +36,7 @@ from dotenv import load_dotenv, find_dotenv
 from aiogram.client.session.aiohttp import AiohttpSession
 from sql_db import check_id, reduce_attempts, set_verified, add_girlphoto, get_users, get_last_commit, \
     add_current_state, get_current_state, add_to_queue, delete_from_queue, get_queue, get_usersinfo_db, \
-    get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username
+    get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username, check_user
 from sql_photos import get_last, add_photo_id, add_rate, add_note, get_photo_id_by_id, get_note_sql, get_votes, \
     get_origin, max_photo_id_among_all, len_photos_by_username, max_photo_id_by_username, get_sluts_db
 from graphics import get_statistics
@@ -52,7 +52,7 @@ storage: MemoryStorage = MemoryStorage()
 # Создаем объекты бота и диспетчера
 bot: Bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp: Dispatcher = Dispatcher(storage=storage)
-
+current_dm_id={}
 states_users = {}
 
 emoji = {
@@ -100,17 +100,22 @@ rate2 = {
 
 
 class FSMFillForm(StatesGroup):
-    inserting_password = State()
     verified = State()
     banned = State()
     sending_photo = State()
     rating = State()
+    sendDM = State()
 
 
 class RateCallBack(CallbackData, prefix="rating"):
     r: int
     photo_id: int
     mailing: int
+
+class ModerateCallBack(CallbackData, prefix="moderate"):
+    action: int
+    photo_id: int
+    creator: str
 
 
 send_slut_button: KeyboardButton = KeyboardButton(
@@ -121,6 +126,9 @@ edit_rate: KeyboardButton = KeyboardButton(
     text='Изменить последнюю оценку')
 basic_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
     keyboard=[[statistics_button], [edit_rate]], resize_keyboard=True,
+    one_time_keyboard=True)
+not_incel_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
+    keyboard=[[statistics_button]], resize_keyboard=True,
     one_time_keyboard=True)
 
 cancel_photo: KeyboardButton = KeyboardButton(
@@ -135,8 +143,51 @@ class check_username(BaseFilter):
         return message.text[1:5] == 'del_'
 
 
+class ban_username(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        return message.text[1:5] == 'ban_'
+
+
+class send_DM(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        return message.text[1:6] == 'send_'
+
+
+@dp.message(F.text, ban_username())
+async def ban_username(message: Message):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+        return
+    s = message.text[5:]
+    result = get_ban(get_id_by_username(s))
+    if result == 0:
+        await message.answer(text=f'Строка с username=<i>"{s}"</i> не найдена в таблице')
+    else:
+        await message.answer(text=f'Пользователь <i>@{s}</i> был успешно забанен!')
+
+
+@dp.message(F.text, send_DM())
+async def send_dm(message: Message, state: FSMContext):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+        return
+    s = message.text[6:]
+    if len(s) <= 2:
+        await message.answer(text=f'Пользователь с username=<i>"{s}"</i> не найден в таблице')
+        return
+    result = check_user(s)
+    if result is None:
+        await message.answer(text=f'Пользователь с username=<i>"{s}"</i> не найден в таблице')
+    else:
+        await message.answer(text=f'Введите сообщение для отправки <i>@{s}</i>')
+        current_dm_id[message.from_user.id] = result
+        await state.set_state(FSMFillForm.sendDM)
+
 @dp.message(F.text, check_username())
-async def del_username(message):
+async def del_username(message: Message):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+        return
     s = message.text[5:]
     result = delete_row(s)
     if result == 0:
@@ -145,7 +196,7 @@ async def del_username(message):
         await message.answer(text=f'Строка с username=<i>"{s}"</i> была успешно удалена')
 
 
-def get_rates_keyboard(num, mailing):
+def get_rates_keyboard(num: int, mailing: int):
     array_buttons: list[list[InlineKeyboardButton]] = [[], []]
     for i in range(12):
         array_buttons[i // 6].append(InlineKeyboardButton(
@@ -156,6 +207,33 @@ def get_rates_keyboard(num, mailing):
     return markup
 
 
+async def send_results(num: int, rate: str):
+    origin = get_origin(num)
+    origin_id = check_user(origin)
+    if origin_id is not None:
+        caption = f'Привет, {origin}.\n Ваше фото оценено на <b>{rate}</b>'
+        await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption)
+
+
+def moderate_keyboard(file_id: int, creator: str):
+    if file_id == -1:
+        array = [[InlineKeyboardButton(
+            text='✅',
+            callback_data=ModerateCallBack(action=3, photo_id=file_id, creator=creator).pack()),
+            InlineKeyboardButton(
+                text='❌',
+                callback_data=ModerateCallBack(action=2, photo_id=file_id, creator=creator).pack())]]
+        return InlineKeyboardMarkup(
+            inline_keyboard=array)
+    array = [[InlineKeyboardButton(
+        text='✅',
+        callback_data=ModerateCallBack(action=1, photo_id=file_id, creator=creator).pack()),
+        InlineKeyboardButton(
+            text='❌',
+            callback_data=ModerateCallBack(action=0, photo_id=file_id, creator=creator).pack())]]
+    return InlineKeyboardMarkup(
+        inline_keyboard=array)
+
 @dp.callback_query(RateCallBack.filter())
 async def filter_rates(callback: CallbackQuery,
                        callback_data: RateCallBack, state: FSMContext):
@@ -165,8 +243,8 @@ async def filter_rates(callback: CallbackQuery,
     votes = get_votes(num)
     flag = True
     insert_last_rate(callback.from_user.id, num)
-    if mailing and len(votes.keys()) == len(get_users()):
-        flag = False  # FLag - индикатор, который отвечает за публикацию поста в канал
+    if mailing and len(votes.keys()) >= len(get_users()):
+        flag = False  # FLag - индикатор, который отвечает за публикацию поста в канал (для того чтобы после изменения оценки пост не выложился еще раз)
     add_rate(num, callback.from_user.username, callback_data.r)
     delete_from_queue(callback.from_user.id, num)
 
@@ -188,9 +266,12 @@ async def filter_rates(callback: CallbackQuery,
                             chat_id=get_id_by_username(last_username), reply_markup=basic_keyboard)
                         states_users[last_username] = datetime.datetime.now()
 
-        if len(votes.keys()) == len(get_users()) and flag:
+        if len(votes.keys()) >= len(get_users()) and flag:
+
 
             avg = sum(votes.values()) / len(votes.keys())
+            avg_str = '{:.2f}'.format(avg)
+            await send_results(num, avg_str)
             extra = ''
             spoiler = False
             if avg == 0:
@@ -199,7 +280,7 @@ async def filter_rates(callback: CallbackQuery,
             if avg == 11:
                 spoiler = True
                 extra = '<b>😍 Все участники банды инцелов оценили фото на 11 😍</b>\n\n'
-            avg_str = '{:.2f}'.format(avg)
+
             user_rates = ''
             for key, value in votes.items():
                 user_rates += f'@{key}: <i>{value}</i>\n'
@@ -225,6 +306,35 @@ async def filter_rates(callback: CallbackQuery,
     await send_photo_to_users(callback.from_user.id, num)
 
 
+@dp.callback_query(ModerateCallBack.filter())
+async def moderate_photo(callback: CallbackQuery,
+                         callback_data: ModerateCallBack, state: FSMContext):
+    action = callback_data.action
+    photo_id = callback_data.photo_id
+    creator = callback_data.creator
+    await callback.answer(text=['❌', '✅'][action % 2])
+    await callback.message.edit_reply_markup(reply_markup=None)
+    if action == 0:
+        await callback.message.answer(text=f'<b>Забанить долбоеба?</b>\n<i>@{creator}</i>',
+                                      reply_markup=moderate_keyboard(-1, creator))
+    elif action == 1:
+        await callback.message.answer(text='Оцени это фото',
+                                      reply_markup=get_rates_keyboard(photo_id, 0))
+    elif action == 3:
+        creator_id = get_id_by_username(creator)
+        if creator_id is None:
+            await callback.message.edit_text(text=f'Строка с username=<i>"{creator}"</i> не найдена в таблице')
+            return
+        result = get_ban(creator_id)
+        if result == 0:
+            await callback.message.edit_text(text=f'Строка с username=<i>"{creator}"</i> не найдена в таблице')
+        else:
+            await callback.message.edit_text(text=f'Пользователь <i>@{creator}</i> был успешно забанен!',
+                                             reply_markup=None)
+    else:
+        await callback.message.edit_text(text=f'Пощадим его', reply_markup=None)
+
+
 # Этот хэндлер будет срабатывать на команду "/start"
 @dp.message(CommandStart())
 async def process_start_command(message: Message, state: FSMContext):
@@ -239,8 +349,7 @@ async def process_start_command(message: Message, state: FSMContext):
             await message.answer('Ты заблокирован', reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
-        await message.answer('Привет, лошара. Введи пароль, чтобы попасть в нашу тусовку')
-        await state.set_state(FSMFillForm.inserting_password)
+        await message.answer('Просто пришли свое фото, и нейросеть оценит твою внешность\n/help', reply_markup=not_incel_keyboard)
 
 
 @dp.message(Command(commands='password_yaincel'))
@@ -254,8 +363,7 @@ async def settings(message: Message, state: FSMContext):
 async def help(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
-        await state.set_state(FSMFillForm.inserting_password)
+        await message.answer('Скинь мне любое фото, и нейросеть оценит его по всей своей ебанутой строгости. На это может понадобиться время. Если Вы добавите подпись к картинке, оценка будет точнее', reply_markup=not_incel_keyboard)
         return
     await message.answer(
         text='Просто скинь мне любое фото, и оно будет отправлено всем участникам <a href="https://t.me/+D_c0v8cHybY2ODQy">банды инцелов</a>. Либо просто напиши "Разослать фото".\nКнопка "Статистика по отправленным фото" покажет тебе график всех средних значений оценок твоих фото.\n' + \
@@ -274,7 +382,8 @@ async def send_users_db(message: Message, state: FSMContext):
             return
         txt = map(str, db)
         txt = '\n'.join(txt)
-        await message.answer(text=txt, reply_markup=basic_keyboard)
+        for i in range((len(txt) + 4096) // 4096):
+            await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
 
 
 @dp.message(Command(commands='get_weekly_db'))
@@ -349,23 +458,15 @@ async def send_sluts_db(message: Message, state: FSMContext):
             await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
 
 
-@dp.message(F.text == 'яинцел', StateFilter(FSMFillForm.inserting_password))
+@dp.message(F.text == 'яинцел')
 async def get_verified(message: Message, state: FSMContext):
     set_verified(id=message.from_user.id)
     await message.answer(
-        text='Легенда! Теперь ты в нашей банде. Просто пришли мне фото, и его  смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к ней и отправь мне, она будет показана в канале по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки',
+        text='Легенда! Теперь ты в нашей банде. Просто пришли мне фото, и его смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к ней и отправь мне, она будет показана в канале по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки',
         reply_markup=basic_keyboard)
     await state.set_state(FSMFillForm.verified)
 
 
-@dp.message(F.text != 'яинцел', StateFilter(FSMFillForm.inserting_password))
-async def wrong_password(message: Message, state: FSMContext):
-    attempts = reduce_attempts(message.from_user.id)
-    if attempts > 0:
-        await message.answer(text=f'Неверный пароль. Осталось попыток: {attempts}')
-    else:
-        await message.answer(text='Ты ввел неверный пароль 5 раз. Иди на хуй, дружок')
-        await state.set_state(FSMFillForm.banned)
 
 
 @dp.message(F.photo, StateFilter(FSMFillForm.sending_photo))
@@ -424,8 +525,11 @@ async def urbanned(message: Message, state: FSMContext):
 async def send_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
-        await state.set_state(FSMFillForm.inserting_password)
+        if result[1] == -1:
+            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await state.set_state(FSMFillForm.banned)
+            return
+        await message.answer('Ну так пришли его', reply_markup=ReplyKeyboardRemove())
         return
     await message.answer(text='Пришли фото', reply_markup=keyboard3)
     await state.set_state(FSMFillForm.sending_photo)
@@ -440,14 +544,26 @@ async def remember_to_rate(message: Message, state: FSMContext):
 @dp.message(F.photo)
 async def default_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
-    if not result[0]:
-        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
-        await state.set_state(FSMFillForm.inserting_password)
-        return
     file_id = message.photo[-1].file_id
     last_num = get_last()
     add_photo_id(last_num + 1, file_id, message.from_user.username)  # этот идентификатор нужно где-то сохранить
     add_girlphoto(message.from_user.id, last_num + 1)
+    if not result[0]:
+        if result[1] == -1:
+            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await state.set_state(FSMFillForm.banned)
+            return
+        await message.answer('Фото пройдет модерацию и будет оценено нейросетью, ожидайте',
+                             reply_markup=ReplyKeyboardRemove())
+        caption = '' if message.caption is None else message.caption
+        if caption != '':
+            add_note(last_num + 1, message.caption)
+            caption = f'\n"{caption}"'
+        await bot.send_photo(972753303, photo=message.photo[-1].file_id,
+                             caption=f'Фото от пользователя <i>@{message.from_user.username}</i><i>{caption}</i>',
+                             reply_markup=moderate_keyboard(last_num + 1, message.from_user.username))
+        return
+
 
     if message.caption is not None:
         await message.answer(
@@ -466,20 +582,39 @@ async def default_photo(message: Message, state: FSMContext):
 async def stat_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
-        await state.set_state(FSMFillForm.inserting_password)
+        if result[1] == -1:
+            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await state.set_state(FSMFillForm.banned)
+            return
+        if len_photos_by_username(message.from_user.username) > 0:
+            username = message.from_user.username
+            get_statistics(username)
+            photo = InputMediaPhoto(media=FSInputFile(f'myplot_{username}2.png'), caption='График')
+            photo2 = InputMediaPhoto(media=FSInputFile(f'myplot_{username}.png'), caption='Гистограмма')
+            media = [photo, photo2]
+            await bot.send_media_group(media=media, chat_id=message.from_user.id)
+            os.remove(f'myplot_{username}.png')
+            os.remove(f'myplot_{username}2.png')
+            await message.answer(
+                text=f'Ваше последнее фото на стадции оценки {len(get_votes(max_photo_id_by_username(username)).keys())/len(get_users())*100}%', reply_markup=not_incel_keyboard)
+        else:
+            await message.answer(text='Ты еще не присылал никаких фото', reply_markup=not_incel_keyboard)
         return
     if len_photos_by_username(message.from_user.username) > 0:
         username = message.from_user.username
         get_statistics(username)
-        photo = InputMediaPhoto(f'myplot_{username}.png')
-        photo2 = InputMediaPhoto(f'myplot_{username}2.png')
+        photo = InputMediaPhoto(media=FSInputFile(f'myplot_{username}2.png'), caption='График')
+        photo2 = InputMediaPhoto(media=FSInputFile(f'myplot_{username}.png'), caption='Гистограмма')
         media = [photo, photo2]
         await bot.send_media_group(media=media, chat_id=message.from_user.id)
         os.remove(f'myplot_{username}.png')
         os.remove(f'myplot_{username}2.png')
+        votes = len(get_votes(max_photo_id_by_username(username)).keys())
+        users = len(get_users())
+        if votes > users:
+            users = votes
         await message.answer(
-            text=f'Ваше последнее фото оценили {len(get_votes(max_photo_id_by_username(username)).keys())}/{len(get_users())} человек')
+            text=f'Ваше последнее фото оценили {votes}/{users} человек')
     else:
         await message.answer(text='Ты еще не присылал никаких фото', reply_markup=basic_keyboard)
 
@@ -488,8 +623,9 @@ async def stat_photo(message: Message, state: FSMContext):
 async def stat_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
-        await state.set_state(FSMFillForm.inserting_password)
+        if result[1] == -1:
+            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await state.set_state(FSMFillForm.banned)
         return
     last_rate = get_last_rate(message.from_user.id)
     if last_rate == 0 or last_rate == 5:
@@ -497,6 +633,25 @@ async def stat_photo(message: Message, state: FSMContext):
         return
     await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(last_rate),
                          reply_markup=get_rates_keyboard(last_rate, 1), caption='Ну давай, переобуйся, тварь')
+
+
+@dp.message(StateFilter(FSMFillForm.sendDM))
+async def stat_photo(message: Message, state: FSMContext):
+    result = check_id(message.from_user.id, message.from_user.username)
+    if not result[0]:
+        if result[1] == -1:
+            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await state.set_state(FSMFillForm.banned)
+        return
+    if current_dm_id[message.from_user.id] == 0:
+        await message.answer(text='Произошла ошибка', reply_markup=basic_keyboard)
+        return
+    await message.answer(text='Сообщение отправлено!', reply_markup=basic_keyboard)
+    await bot.copy_message(chat_id=current_dm_id[message.from_user.id], message_id=message.message_id,
+                           from_chat_id=message.chat.id)
+    current_dm_id[message.from_user.id] = 0
+    await state.clear()
+
 
 
 @dp.message(
@@ -521,11 +676,17 @@ async def ik(message):
 
 
 @dp.message()
-async def every_message(message: Message, state: FSMContext):
+async def any_message(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
-    if not result[0]:
-        await message.answer('Введи пароль', reply_markup=ReplyKeyboardRemove())
-        await state.set_state(FSMFillForm.inserting_password)
+    if not result[0] and result[1] != -1:
+        if message.text:
+            await bot.send_message(chat_id=972753303, text=f'<i>@{message.from_user.username}:</i>\n"{message.text}"', disable_notification=True)
+        else:
+            caption = '' if message.caption is None else f':\n"{message.caption}"'
+            await bot.copy_message(from_chat_id=message.chat.id,chat_id=972753303, message_id=message.message_id, disable_notification=True, caption=f'<i>@{message.from_user.username}</i>{caption}')
+    if not result[0] and result[1] == -1:
+        await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+        await state.set_state(FSMFillForm.banned)
         return
     await message.answer(text='я не понимаю, о чем ты', reply_markup=basic_keyboard)
 
@@ -553,7 +714,8 @@ async def weekly_tierlist(delete=1, automatic=1):
         os.remove("tier_list.png")
         if delete:
             clear_db()
-
+    else:
+        await bot.send_message(chat_id=972753303, text='Тир лист отключен',reply_markup=basic_keyboard)
 
 async def notify():
     for user in get_users():

@@ -22,4 +22,4 @@ def color_calculate(avg):
         red = 1.0
         green = 0.0
         blue = 1.0 - fract
-    return (red, green, blue)
+    return (red, green, blue, 0.7)

@@ -48,4 +48,4 @@ def get_statistics(username):
     plt.clf()
 
 
-get_statistics('nklnkk')
+

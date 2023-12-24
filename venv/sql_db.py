@@ -4,7 +4,7 @@ import json
 from typing import Dict
 
 # Creating a database connection
-conn = sqlite3.connect('usersDB.db')
+conn = sqlite3.connect('test.db')
 cursor = conn.cursor()
 
 # Creating a table with id and info columns
@@ -23,16 +23,23 @@ def check_id(id: int, username: str) -> bool:
                        (id, username, False, False, 5))
         conn.commit()
         return [False, 5]
-    if result[0]:
+
+    verified = True if result[0] else False
+    if verified:
         return [True]
+    cursor.execute("SELECT banned FROM users_info WHERE id=?", (id,))
+    result = cursor.fetchone()
+    if result[0]:
+        return [False, -1]
+
     cursor.execute("SELECT attempts FROM users_info WHERE id=?", (id,))
     result = cursor.fetchone()[0]
     if result <= 0:
         cursor.execute("UPDATE users_info SET banned=?, attempts=? WHERE id=?", (True, 0, id,))
         conn.commit()
-    else:
-        cursor.execute("UPDATE users_info SET attempts=? WHERE id=?", (result - 1, id,))
-        conn.commit()
+    # else:
+    #     cursor.execute("UPDATE users_info SET attempts=? WHERE id=?", (result - 1, id,))
+    #     conn.commit()
     return [False, result]
 
 
@@ -142,7 +149,9 @@ def get_username_by_id(id):
 
 def get_ban(id):
     cursor.execute("UPDATE users_info SET banned=?, verified=? WHERE id=?", (True, False, id,))
-    conn.commit()
+    if cursor.rowcount == 0:
+        return 0
+    return 1
 
 
 def get_current_state(id):
@@ -152,12 +161,18 @@ def get_current_state(id):
 
 
 def delete_row(username):
-    cursor.execute("DELETE FROM users_info WHERE username=?", ('newerry',))
+    cursor.execute("DELETE FROM users_info WHERE username=?", (username,))
     conn.commit()
     if cursor.rowcount == 0:
         return 0
     return 1
 
+def check_user(username):
+    cursor.execute("SELECT id FROM users_info WHERE username=?", (username,))
+    result = cursor.fetchone()
+    if result is not None:
+        return result[0]
+    return None
 
 def get_usersinfo_db():
     cursor.execute("SELECT * FROM users_info")
