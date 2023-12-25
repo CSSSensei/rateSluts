@@ -18,6 +18,7 @@ import asyncio
 import calendar
 import datetime
 import os
+import requests
 from typing import List, Dict
 
 import tzlocal
@@ -315,6 +316,9 @@ async def moderate_photo(callback: CallbackQuery,
     await callback.answer(text=['❌', '✅'][action % 2])
     await callback.message.edit_reply_markup(reply_markup=None)
     if action == 0:
+        creator_id = get_id_by_username(creator)
+        if creator_id is not None:
+            await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),caption='Ваше фото отклонено. Возможно, на фото нет человека, либо содержимое неприемлемо. Попробуйте отправить <i>другое</i> фото или <b>добавить подпись</b>', reply_markup=not_incel_keyboard)
         await callback.message.answer(text=f'<b>Забанить долбоеба?</b>\n<i>@{creator}</i>',
                                       reply_markup=moderate_keyboard(-1, creator))
     elif action == 1:
@@ -363,12 +367,28 @@ async def settings(message: Message, state: FSMContext):
 async def help(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Скинь мне любое фото, и нейросеть оценит его по всей своей ебанутой строгости. На это может понадобиться время. Если Вы добавите подпись к картинке, оценка будет точнее', reply_markup=not_incel_keyboard)
+        await message.answer('Скинь мне любое фото, и нейросеть оценит его по всей своей ебанутой строгости. На это может понадобиться время. <b>Если Вы добавите подпись к картинке, оценка будет <i>точнее</i></b>', reply_markup=not_incel_keyboard)
         return
     await message.answer(
         text='Просто скинь мне любое фото, и оно будет отправлено всем участникам <a href="https://t.me/+D_c0v8cHybY2ODQy">банды инцелов</a>. Либо просто напиши "Разослать фото".\nКнопка "Статистика по отправленным фото" покажет тебе график всех средних значений оценок твоих фото.\n' + \
              'Отправил оценку ошибочно? Тогда нажми кнопку "Изменить последнюю оценку".\nЕсли ты хочешь добавить заметку к фото, сделай подпись к ней и отправь мне, она будет показана в канале по окончании голосования',
         disable_web_page_preview=True, reply_markup=basic_keyboard)
+
+
+@dp.message(Command(commands='quote'))
+async def quote(message: Message, state: FSMContext):
+    url = "http://api.forismatic.com/api/1.0/"
+    params = {
+        "method": "getQuote",
+        "format": "json",
+        "lang": "ru"
+    }
+    try:
+        response = requests.get(url, params=params)
+        quote = response.json()["quoteText"]
+        await message.answer(text=f'<i>{quote}</i>')
+    except requests.RequestException as e:
+        await message.answer(text=f'<b>пРоИзОшЛа ОшИбКаАаАааА</b>')
 
 
 @dp.message(Command(commands='get_users_info_db'))
@@ -640,10 +660,10 @@ async def stat_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
         if result[1] == -1:
-            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
+        await message.answer('Тебе недоступна данная команда(', reply_markup=ReplyKeyboardRemove())
         return
-    if current_dm_id[message.from_user.id] == 0:
+    if current_dm_id.get(message.from_user.id, 0) == 0:
         await message.answer(text='Произошла ошибка', reply_markup=basic_keyboard)
         return
     await message.answer(text='Сообщение отправлено!', reply_markup=basic_keyboard)
@@ -725,8 +745,12 @@ async def notify():
             continue
         if len(q) == 0:
             continue
-        await bot.send_message(chat_id=user, text='Напоминание:\n\n<b>оцени фото, тварь 🤬</b>',
-                               reply_markup=basic_keyboard)
+        if states_users.get(user, None) is None or states_users[user] + datetime.timedelta(
+                hours=1) < datetime.datetime.now():
+            await bot.send_message(chat_id=user, text='Напоминание:\n\n<b>оцени фото, тварь 🤬</b>',
+                                   reply_markup=basic_keyboard)
+            states_users[user] = datetime.datetime.now()
+
 
 
 async def main():
