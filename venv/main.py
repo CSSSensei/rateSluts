@@ -318,7 +318,7 @@ async def moderate_photo(callback: CallbackQuery,
     if action == 0:
         creator_id = get_id_by_username(creator)
         if creator_id is not None:
-            await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),caption='Ваше фото отклонено. Возможно, на фото нет человека, либо содержимое неприемлемо. Попробуйте отправить <i>другое</i> фото или <b>добавить подпись</b>', reply_markup=not_incel_keyboard)
+            await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),caption='Ваше фото ❌ отклонено ❌. Возможно, на фото нет человека, либо содержимое неприемлемо. Попробуйте отправить <i>другое</i> фото или <b>добавить подпись</b> 🖋️.', reply_markup=not_incel_keyboard)
         await callback.message.answer(text=f'<b>Забанить долбоеба?</b>\n<i>@{creator}</i>',
                                       reply_markup=moderate_keyboard(-1, creator))
     elif action == 1:
@@ -367,7 +367,7 @@ async def settings(message: Message, state: FSMContext):
 async def help(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Скинь мне любое фото, и нейросеть оценит его по всей своей ебанутой строгости. На это может понадобиться время. <b>Если Вы добавите подпись к картинке, оценка будет <i>точнее</i></b>', reply_markup=not_incel_keyboard)
+        await message.answer('Скинь 😊 мне 🤗 любое 📸 фото, и 🤖 нейросеть 🧠 оценит 📈 его 💯 по 👇 всей 😮 своей 🤪 ебанутой 🙃 строгости. На 🕒 это 🤔 может 🤞 понадобиться ⏳ время. Если 😌 Вы 🙏<b> добавите 📝 подпись </b>✍️ к 🖼️ картинке, <i>оценка 📊 будет ⭐️ точнее</i>.', reply_markup=not_incel_keyboard)
         return
     await message.answer(
         text='Просто скинь мне любое фото, и оно будет отправлено всем участникам <a href="https://t.me/+D_c0v8cHybY2ODQy">банды инцелов</a>. Либо просто напиши "Разослать фото".\nКнопка "Статистика по отправленным фото" покажет тебе график всех средних значений оценок твоих фото.\n' + \
@@ -386,10 +386,33 @@ async def quote(message: Message, state: FSMContext):
     try:
         response = requests.get(url, params=params)
         quote = response.json()["quoteText"]
-        await message.answer(text=f'<i>{quote}</i>')
+        keyboard: list[list[InlineKeyboardButton]] = [
+            [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]
+        ]
+        markup_local = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        await message.answer(text=f'<i>{quote}</i>', reply_markup=markup_local)
     except requests.RequestException as e:
         await message.answer(text=f'<b>пРоИзОшЛа ОшИбКаАаАааА</b>')
 
+@dp.callback_query(F.data == 'more')
+async def process_more_press(callback: CallbackQuery):
+    url = "http://api.forismatic.com/api/1.0/"
+    params = {
+        "method": "getQuote",
+        "format": "json",
+        "lang": "ru"
+    }
+    try:
+        response = requests.get(url, params=params)
+        quote = response.json()["quoteText"]
+        keyboard: list[list[InlineKeyboardButton]] = [
+            [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]
+        ]
+        markup_local = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        await callback.answer()
+        await callback.message.answer(text=f'<i>{quote}</i>', reply_markup=markup_local)
+    except requests.RequestException as e:
+        await callback.message.answer(text=f'<b>пРоИзОшЛа ОшИбКаАаАааА</b>')
 
 @dp.message(Command(commands='get_users_info_db'))
 async def send_users_db(message: Message, state: FSMContext):
@@ -482,7 +505,7 @@ async def send_sluts_db(message: Message, state: FSMContext):
 async def get_verified(message: Message, state: FSMContext):
     set_verified(id=message.from_user.id)
     await message.answer(
-        text='Легенда! Теперь ты в нашей банде. Просто пришли мне фото, и его смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к ней и отправь мне, она будет показана в канале по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки',
+        text='Легенда! Теперь ты в нашей банде. Просто пришли мне фото, и его смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к фото и отправь мне, она будет показана в канале по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки',
         reply_markup=basic_keyboard)
     await state.set_state(FSMFillForm.verified)
 
@@ -573,7 +596,7 @@ async def default_photo(message: Message, state: FSMContext):
             await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
-        await message.answer('Фото пройдет модерацию и будет оценено нейросетью, ожидайте',
+        await message.answer('Фото пройдет ✅ модерацию и будет оценено нейросетью 🧠, ожидайте.',
                              reply_markup=ReplyKeyboardRemove())
         caption = '' if message.caption is None else message.caption
         if caption != '':
