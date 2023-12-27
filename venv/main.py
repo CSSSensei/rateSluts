@@ -19,6 +19,7 @@ import calendar
 import datetime
 import os
 import requests
+import random
 from typing import List, Dict
 
 import tzlocal
@@ -37,7 +38,8 @@ from dotenv import load_dotenv, find_dotenv
 from aiogram.client.session.aiohttp import AiohttpSession
 from sql_db import check_id, reduce_attempts, set_verified, add_girlphoto, get_users, get_last_commit, \
     add_current_state, get_current_state, add_to_queue, delete_from_queue, get_queue, get_usersinfo_db, \
-    get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username, check_user
+    get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username, check_user, \
+    get_not_incel
 from sql_photos import get_last, add_photo_id, add_rate, add_note, get_photo_id_by_id, get_note_sql, get_votes, \
     get_origin, max_photo_id_among_all, len_photos_by_username, max_photo_id_by_username, get_sluts_db
 from graphics import get_statistics
@@ -55,6 +57,9 @@ bot: Bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp: Dispatcher = Dispatcher(storage=storage)
 current_dm_id={}
 states_users = {}
+project_folder = os.getcwd()
+legendary_quote = 'Назвался груздем — пошёл на хуй\nНе сделал дело — пошёл на хуй\nИ баба с возу пошла на хуй\nИ волки на хуй, и овцы на хуй\n\nХотел как лучше, а пошёл на хуй\nДают — бери, а бьют — иди на хуй\nДружба дружбой, а на хуй иди\nЧья бы корова мычала, а твоя пошла на хуй\n\nУченье свет, а ты пошёл на хуй\nСемь раз отмерь и иди на хуй\nСкажи мне кто твой друг, и оба на хуй\nЧем бы дитя не тешилось, а шло бы на хуй\n\nПришла беда — пошла на хуй!\nГотовь сани летом, а зимой на хyй иди!\nСо своим уставом иди на хуй!\nИди на хуй не отходя от кассы!'
+
 
 emoji = {
     0: '🤢',
@@ -167,12 +172,32 @@ async def ban_username(message: Message):
         await message.answer(text=f'Пользователь <i>@{s}</i> был успешно забанен!')
 
 
-@dp.message(F.text, send_DM())
-async def send_dm(message: Message, state: FSMContext):
+@dp.message(Command(commands='send_tier_list'))
+async def send_tier_and_delete(message: Message, state: FSMContext):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
-        return
+    else:
+        await message.answer(text='Тир лист был отправлен, БД очищена', reply_markup=basic_keyboard)
+        await weekly_tierlist(automatic=0)
+
+
+@dp.message(Command(commands='send_tier_list_notdel'))
+async def send_tier_list(message: Message, state: FSMContext):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        await message.answer(text='Тир лист был отправлен, БД сохранена', reply_markup=basic_keyboard)
+        await weekly_tierlist(delete=0, automatic=0)
+
+
+@dp.message(F.text, send_DM())
+async def send_dm(message: Message, state: FSMContext):
     s = message.text[6:]
+    if s == "all":
+        await message.answer(text=f'Введите сообщение для отправки всем бомжам')
+        current_dm_id[message.from_user.id] = -1
+        await state.set_state(FSMFillForm.sendDM)
+        return
     if len(s) <= 2:
         await message.answer(text=f'Пользователь с username=<i>"{s}"</i> не найден в таблице')
         return
@@ -211,9 +236,18 @@ def get_rates_keyboard(num: int, mailing: int):
 async def send_results(num: int, rate: str):
     origin = get_origin(num)
     origin_id = check_user(origin)
-    if origin_id is not None:
-        caption = f'Привет, {origin}.\n Ваше фото оценено на <b>{rate}</b>'
-        await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption)
+    if origin_id not in get_users():
+        if origin_id is not None:
+            if float(rate) <= 4:
+                emoji_loc = '📉'
+            else:
+                emoji_loc = '📈'
+            caption = f'Привет, {origin}. Ваше фото оценено на <b>{rate} из 10</b> {emoji_loc}\n<span class="tg-spoiler">(Внимание! Нейросеть только обучается)</span>'
+            try:
+                await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption)
+            except Exception as e:
+                await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
+
 
 
 def moderate_keyboard(file_id: int, creator: str):
@@ -318,10 +352,23 @@ async def moderate_photo(callback: CallbackQuery,
     if action == 0:
         creator_id = get_id_by_username(creator)
         if creator_id is not None:
-            await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),caption='Ваше фото ❌ отклонено ❌. Возможно, на фото нет человека, либо содержимое неприемлемо. Попробуйте отправить <i>другое</i> фото или <b>добавить подпись</b> 🖋️.', reply_markup=not_incel_keyboard)
+            try:
+                await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),
+                                     caption='Ваше фото ❌ <b>отклонено</b> ❌\n\nВозможно, на фото нет 👨🏿‍🦰 человека 👨‍🦰, либо содержимое 🔩 неприемлемо 🔩. Попробуйте отправить <i>другое</i> фото или <b>добавить подпись</b> 🖋️.',
+                                     reply_markup=not_incel_keyboard)
+            except Exception as e:
+                await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
         await callback.message.answer(text=f'<b>Забанить долбоеба?</b>\n<i>@{creator}</i>',
                                       reply_markup=moderate_keyboard(-1, creator))
     elif action == 1:
+        creator_id = get_id_by_username(creator)
+        if creator_id is not None:
+            try:
+                await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),
+                             caption='Ваше фото ✅ <b>принято</b> ✅\n\nОжидайте, пока нейросеть оценит его. Напоминаем, что это может занять время ⏰ <span class="tg-spoiler">(Много времени ⌚️🕐⏲)</span',
+                             reply_markup=not_incel_keyboard)
+            except Exception as e:
+                await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
         await callback.message.answer(text='Оцени это фото',
                                       reply_markup=get_rates_keyboard(photo_id, 0))
     elif action == 3:
@@ -384,15 +431,19 @@ async def quote(message: Message, state: FSMContext):
         "lang": "ru"
     }
     try:
-        response = requests.get(url, params=params)
-        quote = response.json()["quoteText"]
+        if random.random() <= 0.01:  # Шанс 1%
+            quote = legendary_quote
+        else:
+            response = requests.get(url, params=params)
+            quote = response.json()["quoteText"]
+
         keyboard: list[list[InlineKeyboardButton]] = [
-            [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]
-        ]
+            [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]]
         markup_local = InlineKeyboardMarkup(inline_keyboard=keyboard)
         await message.answer(text=f'<i>{quote}</i>', reply_markup=markup_local)
     except requests.RequestException as e:
-        await message.answer(text=f'<b>пРоИзОшЛа ОшИбКаАаАааА</b>')
+        await callback.message.answer(text=f'<i>{legendary_quote}</i>')
+
 
 @dp.callback_query(F.data == 'more')
 async def process_more_press(callback: CallbackQuery):
@@ -403,16 +454,19 @@ async def process_more_press(callback: CallbackQuery):
         "lang": "ru"
     }
     try:
-        response = requests.get(url, params=params)
-        quote = response.json()["quoteText"]
+        if random.random() <= 0.01:  # Шанс 1%
+            quote = legendary_quote
+        else:
+            response = requests.get(url, params=params)
+            quote = response.json()["quoteText"]
         keyboard: list[list[InlineKeyboardButton]] = [
-            [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]
-        ]
+            [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]]
         markup_local = InlineKeyboardMarkup(inline_keyboard=keyboard)
         await callback.answer()
         await callback.message.answer(text=f'<i>{quote}</i>', reply_markup=markup_local)
     except requests.RequestException as e:
-        await callback.message.answer(text=f'<b>пРоИзОшЛа ОшИбКаАаАааА</b>')
+        await callback.message.answer(text=f'<i>{legendary_quote}</i>')
+
 
 @dp.message(Command(commands='get_users_info_db'))
 async def send_users_db(message: Message, state: FSMContext):
@@ -460,24 +514,6 @@ async def send_users_db_func(message: Message, state: FSMContext):
     else:
         weekly_resume(message.from_user.id)
         await message.answer(text='Еженедельная рассылка тир листа возобновлена', reply_markup=basic_keyboard)
-
-
-@dp.message(Command(commands='send_tier_list'))
-async def send_tier_and_delete(message: Message, state: FSMContext):
-    if message.from_user.id != 972753303:
-        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
-    else:
-        await message.answer(text='Тир лист был отправлен, БД очищена', reply_markup=basic_keyboard)
-        await weekly_tierlist(automatic=0)
-
-
-@dp.message(Command(commands='send_tier_list_notdel'))
-async def send_tier_list(message: Message, state: FSMContext):
-    if message.from_user.id != 972753303:
-        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
-    else:
-        await message.answer(text='Тир лист был отправлен, БД сохранена', reply_markup=basic_keyboard)
-        await weekly_tierlist(delete=0, automatic=0)
 
 
 @dp.message(Command(commands='get_ban'))
@@ -593,11 +629,14 @@ async def default_photo(message: Message, state: FSMContext):
     add_girlphoto(message.from_user.id, last_num + 1)
     if not result[0]:
         if result[1] == -1:
-            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await message.answer('Ты заблокирован! 💀', reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
-        await message.answer('Фото пройдет ✅ модерацию и будет оценено нейросетью 🧠, ожидайте.',
+        try:
+            await message.answer('Фото пройдет ✅ автоматическую модерацию и будет оценено нейросетью 🧠, ожидайте. Это займет астрономическое количество времени 🕘',
                              reply_markup=ReplyKeyboardRemove())
+        except Exception as e:
+            await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
         caption = '' if message.caption is None else message.caption
         if caption != '':
             add_note(last_num + 1, message.caption)
@@ -684,14 +723,36 @@ async def stat_photo(message: Message, state: FSMContext):
     if not result[0]:
         if result[1] == -1:
             await state.set_state(FSMFillForm.banned)
+            await message.answer('Тебе недоступна данная команда(', reply_markup=ReplyKeyboardRemove())
+            return
         await message.answer('Тебе недоступна данная команда(', reply_markup=ReplyKeyboardRemove())
+        await state.clear()
         return
     if current_dm_id.get(message.from_user.id, 0) == 0:
         await message.answer(text='Произошла ошибка', reply_markup=basic_keyboard)
+        await state.clear()
         return
-    await message.answer(text='Сообщение отправлено!', reply_markup=basic_keyboard)
-    await bot.copy_message(chat_id=current_dm_id[message.from_user.id], message_id=message.message_id,
-                           from_chat_id=message.chat.id)
+    if current_dm_id.get(message.from_user.id, 0) == -1:
+        current_dm_id[message.from_user.id] = 0
+        await state.clear()
+        not_incel_ids: set = get_not_incel()
+        successfully_sent = 0
+        for id_local in not_incel_ids:
+            try:
+                await bot.copy_message(chat_id=id_local, message_id=message.message_id,
+                                       from_chat_id=message.chat.id)
+                successfully_sent += 1
+            except Exception as e:
+                pass
+        await message.answer(text=f'Сообщение отправлено {successfully_sent} пользователю(-ям)',
+                             reply_markup=basic_keyboard)
+        return
+    try:
+        await bot.copy_message(chat_id=current_dm_id[message.from_user.id], message_id=message.message_id,
+                               from_chat_id=message.chat.id)
+        await message.answer(text='Сообщение отправлено!', reply_markup=basic_keyboard)
+    except Exception as e:
+        await message.answer(text=f'Произошла ошибка!\nПользователь заблокировал бота!')
     current_dm_id[message.from_user.id] = 0
     await state.clear()
 
@@ -736,27 +797,30 @@ async def any_message(message: Message, state: FSMContext):
 
 async def weekly_tierlist(delete=1, automatic=1):
     if get_weekly(972753303):
-        d = get_weekly_db()
-        new_d = {}
-        cnt = 1
-        for key, values in d.items():
-            for value in values:
-                f = await bot.get_file(value)
-                f_path = f.file_path
-                await bot.download_file(f_path, f"test_{cnt}.jpg")
-                new_d[key] = [f"test_{cnt}.jpg"] + new_d.get(key, [])
-                cnt += 1
-        draw_tier_list(new_d)
-        for i in range(1, cnt):
-            os.remove(f"test_{i}.jpg")
-        photo = FSInputFile("tier_list.png")
-        if automatic:
-            await bot.send_document(document=photo, chat_id=channel_id, caption='<b>Еженедельный тир лист ❤️</b>')
-        else:
-            await bot.send_document(document=photo, chat_id=channel_id, caption='<b>Текущий тир лист ❤️</b>')
-        os.remove("tier_list.png")
-        if delete:
-            clear_db()
+        try:
+            d = get_weekly_db()
+            new_d = {}
+            cnt = 1
+            for key, values in d.items():
+                for value in values:
+                    f = await bot.get_file(value)
+                    f_path = f.file_path
+                    await bot.download_file(f_path, f"test_{cnt}.jpg")
+                    new_d[key] = [f"test_{cnt}.jpg"] + new_d.get(key, [])
+                    cnt += 1
+            draw_tier_list(new_d)
+            for i in range(1, cnt):
+                os.remove(f"test_{i}.jpg")
+            photo = FSInputFile("tier_list.png")
+            if automatic:
+                await bot.send_document(document=photo, chat_id=channel_id, caption='<b>Еженедельный тир лист ❤️</b>')
+            else:
+                await bot.send_document(document=photo, chat_id=channel_id, caption='<b>Текущий тир лист ❤️</b>')
+            os.remove("tier_list.png")
+            if delete:
+                clear_db()
+        except Exception as e:
+            await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
     else:
         await bot.send_message(chat_id=972753303, text='Тир лист отключен',reply_markup=basic_keyboard)
 

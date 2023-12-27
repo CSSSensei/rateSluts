@@ -4,7 +4,7 @@ import json
 from typing import Dict
 
 # Creating a database connection
-conn = sqlite3.connect('test.db')
+conn = sqlite3.connect('usersDB.db')
 cursor = conn.cursor()
 
 # Creating a table with id and info columns
@@ -105,7 +105,7 @@ def set_verified(id: int()):
     conn.commit()
 
 
-def get_users():
+def get_users() -> set:
     cursor.execute("SELECT id FROM users_info WHERE verified = True")
     rows = cursor.fetchall()
     return set(row[0] for row in rows)
@@ -114,6 +114,12 @@ def get_users():
 def add_girlphoto(id, num):
     cursor.execute("UPDATE users_info SET photos_ids=? WHERE id=?", (str(num), id,))
     conn.commit()
+
+
+def get_not_incel() -> set:
+    cursor.execute("SELECT id FROM users_info WHERE verified = False AND banned = False")
+    rows = cursor.fetchall()
+    return set(row[0] for row in rows)
 
 
 def get_last_commit(id):
