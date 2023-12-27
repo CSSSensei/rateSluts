@@ -757,7 +757,6 @@ async def stat_photo(message: Message, state: FSMContext):
     await state.clear()
 
 
-
 @dp.message(
     lambda message: message.text is not None and (
             message.text.lower() == 'спасибо' or message.text.lower() == 'от души' or message.text.lower() == 'благодарю'))

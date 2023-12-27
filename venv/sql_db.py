@@ -180,6 +180,7 @@ def check_user(username):
         return result[0]
     return None
 
+
 def get_usersinfo_db():
     cursor.execute("SELECT * FROM users_info")
     rows = cursor.fetchall()
