@@ -21,6 +21,7 @@ import os
 import requests
 import random
 from typing import List, Dict
+from pathlib import Path
 
 import tzlocal
 from aiogram import Bot, Dispatcher, F
@@ -31,7 +32,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import FSInputFile, InputMediaPhoto
 from aiogram.types import (KeyboardButton, Message, ReplyKeyboardMarkup,
-                           ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery)
+                           ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ContentType)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv, find_dotenv
@@ -46,6 +47,7 @@ from graphics import get_statistics
 from weekly_rates import add_to_weekly, clear_db, get_weekly_db, get_weekly, weekly_cancel, weekly_resume, \
     get_weekly_db_info
 from tier_list import draw_tier_list
+from statham import get_randQuote, insert_quote, get_statham_db, del_quote
 
 load_dotenv(find_dotenv())
 
@@ -57,9 +59,10 @@ bot: Bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp: Dispatcher = Dispatcher(storage=storage)
 current_dm_id={}
 states_users = {}
-project_folder = os.getcwd()
 legendary_quote = 'Назвался груздем — пошёл на хуй\nНе сделал дело — пошёл на хуй\nИ баба с возу пошла на хуй\nИ волки на хуй, и овцы на хуй\n\nХотел как лучше, а пошёл на хуй\nДают — бери, а бьют — иди на хуй\nДружба дружбой, а на хуй иди\nЧья бы корова мычала, а твоя пошла на хуй\n\nУченье свет, а ты пошёл на хуй\nСемь раз отмерь и иди на хуй\nСкажи мне кто твой друг, и оба на хуй\nЧем бы дитя не тешилось, а шло бы на хуй\n\nПришла беда — пошла на хуй!\nГотовь сани летом, а зимой на хyй иди!\nСо своим уставом иди на хуй!\nИди на хуй не отходя от кассы!'
-
+hz_answers = ['Я тебя не понимаю...', 'Я не понимаю, о чем ты', 'Что ты имеешь в виду? 🧐', 'Я в замешательстве 🤨',
+               'Не улавливаю смысла 🙃', 'Что ты пытаешься сказать❓', 'Не понимаю твоего сообщения 😕',
+               '🤷‍♂️ Не понимаю 🤷‍♀️']
 
 emoji = {
     0: '🤢',
@@ -111,6 +114,7 @@ class FSMFillForm(StatesGroup):
     sending_photo = State()
     rating = State()
     sendDM = State()
+    sendQuote = State()
 
 
 class RateCallBack(CallbackData, prefix="rating"):
@@ -172,6 +176,12 @@ async def ban_username(message: Message):
         await message.answer(text=f'Пользователь <i>@{s}</i> был успешно забанен!')
 
 
+@dp.message(Command(commands='new_quote'), F.from_user.id.in_(get_users()))
+async def send_quote_dada(message: Message, state: FSMContext):
+    await message.answer(text='Пришли цитату в формате фото или текста')
+    await state.set_state(FSMFillForm.sendQuote)
+
+
 @dp.message(Command(commands='send_tier_list'))
 async def send_tier_and_delete(message: Message, state: FSMContext):
     if message.from_user.id != 972753303:
@@ -190,7 +200,7 @@ async def send_tier_list(message: Message, state: FSMContext):
         await weekly_tierlist(delete=0, automatic=0)
 
 
-@dp.message(F.text, send_DM())
+@dp.message(F.text, send_DM(), F.from_user.id.in_(get_users()))
 async def send_dm(message: Message, state: FSMContext):
     s = message.text[6:]
     if s == "all":
@@ -244,7 +254,7 @@ async def send_results(num: int, rate: str):
                 emoji_loc = '📈'
             caption = f'Привет, {origin}. Ваше фото оценено на <b>{rate} из 10</b> {emoji_loc}\n<span class="tg-spoiler">(Внимание! Нейросеть только обучается)</span>'
             try:
-                await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption)
+                await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption, reply_markup=not_incel_keyboard)
             except Exception as e:
                 await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
 
@@ -302,7 +312,6 @@ async def filter_rates(callback: CallbackQuery,
                         states_users[last_username] = datetime.datetime.now()
 
         if len(votes.keys()) >= len(get_users()) and flag:
-
 
             avg = sum(votes.values()) / len(votes.keys())
             avg_str = '{:.2f}'.format(avg)
@@ -365,7 +374,7 @@ async def moderate_photo(callback: CallbackQuery,
         if creator_id is not None:
             try:
                 await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),
-                             caption='Ваше фото ✅ <b>принято</b> ✅\n\nОжидайте, пока нейросеть оценит его. Напоминаем, что это может занять время ⏰ <span class="tg-spoiler">(Много времени ⌚️🕐⏲)</span',
+                             caption='Ваше фото ✅ <b>принято</b> ✅\n\nОжидайте, пока нейросеть оценит его. Напоминаем, что это может занять время ⏰ <span class="tg-spoiler">(Много времени ⌚️🕐⏲)</span>',
                              reply_markup=not_incel_keyboard)
             except Exception as e:
                 await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
@@ -400,7 +409,8 @@ async def process_start_command(message: Message, state: FSMContext):
             await message.answer('Ты заблокирован', reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
-        await message.answer('Просто пришли свое фото, и нейросеть оценит твою внешность\n/help', reply_markup=not_incel_keyboard)
+        await message.answer('Просто пришли своё фото, и нейросеть оценит твою внешность 🤯\n/help')
+        await message.answer_sticker(sticker='CAACAgIAAxkBAAELD9NljoEHEI6ehudWG_Cql5PXBwMw-AACSCYAAu2TuUvJCvMfrF9irTQE', reply_markup=not_incel_keyboard)
 
 
 @dp.message(Command(commands='password_yaincel'))
@@ -431,18 +441,26 @@ async def quote(message: Message, state: FSMContext):
         "lang": "ru"
     }
     try:
-        if random.random() <= 0.01:  # Шанс 1%
-            quote = legendary_quote
-        else:
-            response = requests.get(url, params=params)
-            quote = response.json()["quoteText"]
-
+        rand_int = random.random()
         keyboard: list[list[InlineKeyboardButton]] = [
             [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]]
         markup_local = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        if rand_int <= 0.01:  # Шанс 1%
+            quote = legendary_quote
+        elif rand_int <= 0.4:
+            result = get_randQuote()
+            if result[0] is not None:
+                caption = None if result[1] is None else f'<i>{result[1]}</i>'
+                await message.answer_photo(photo=result[0], caption=caption, reply_markup=markup_local)
+            else:
+                await message.answer(text=f'<i>{result[1]}</i>', reply_markup=markup_local)
+            return
+        else:
+            response = requests.get(url, params=params)
+            quote = response.json()["quoteText"]
         await message.answer(text=f'<i>{quote}</i>', reply_markup=markup_local)
     except requests.RequestException as e:
-        await callback.message.answer(text=f'<i>{legendary_quote}</i>')
+        await message.answer(text=f'<i>{legendary_quote}</i>')
 
 
 @dp.callback_query(F.data == 'more')
@@ -454,33 +472,71 @@ async def process_more_press(callback: CallbackQuery):
         "lang": "ru"
     }
     try:
-        if random.random() <= 0.01:  # Шанс 1%
-            quote = legendary_quote
-        else:
-            response = requests.get(url, params=params)
-            quote = response.json()["quoteText"]
+        await callback.answer()
+        rand_int = random.random()
         keyboard: list[list[InlineKeyboardButton]] = [
             [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]]
         markup_local = InlineKeyboardMarkup(inline_keyboard=keyboard)
-        await callback.answer()
+        if rand_int <= 0.01:  # Шанс 1%
+            quote = legendary_quote
+        elif rand_int <= 0.4:
+            result = get_randQuote()
+            if result[0] is not None:
+                caption = None if result[1] is None else f'<i>{result[1]}</i>'
+                await callback.message.answer_photo(photo=result[0], caption=caption, reply_markup=markup_local)
+            else:
+                await callback.message.answer(text=f'<i>{result[1]}</i>', reply_markup=markup_local)
+            return
+        else:
+            response = requests.get(url, params=params)
+            quote = response.json()["quoteText"]
+
         await callback.message.answer(text=f'<i>{quote}</i>', reply_markup=markup_local)
     except requests.RequestException as e:
         await callback.message.answer(text=f'<i>{legendary_quote}</i>')
 
 
-@dp.message(Command(commands='get_users_info_db'))
+@dp.message(Command(commands='get_users_info_db'), F.from_user.id.in_(get_users()))
 async def send_users_db(message: Message, state: FSMContext):
-    if message.from_user.id != 972753303:
-        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    db = get_usersinfo_db()
+    if db is None:
+        await message.answer(text='БД пустая', reply_markup=basic_keyboard)
+        return
+    txt = map(str, db)
+    txt = '\n'.join(txt)
+    for i in range((len(txt) + 4096) // 4096):
+        await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
+
+
+@dp.message(Command(commands='remove_quote'), F.from_user.id.in_(get_users()))
+async def remove_quote(message: Message, state: FSMContext):
+    if len(message.text) <= len('remove_quote') + 2:
+        await message.answer(text='Произошла ошибка')
+        return
+    num = int(message.text[len('remove_quote') + 2:])
+    res = del_quote(num)
+    if res:
+        await message.answer(text=f'Цитата №{num} удалена')
     else:
-        db = get_usersinfo_db()
-        if db is None:
-            await message.answer(text='БД пустая', reply_markup=basic_keyboard)
-            return
-        txt = map(str, db)
-        txt = '\n'.join(txt)
-        for i in range((len(txt) + 4096) // 4096):
-            await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
+        await message.answer(text='Произошла ошибка')
+
+
+@dp.message(Command(commands='get_statham_db'), F.from_user.id.in_(get_users()))
+async def send_statham_db(message: Message):
+    db = get_statham_db()
+    if db is None or len(db) == 0:
+        await message.answer(text='БД пустая', reply_markup=basic_keyboard)
+        return
+    txt = map(str, db)
+    txt = '\n'.join(txt)
+    for i in range((len(txt) + 4096) // 4096):
+        await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
+
+
+@dp.message(Command(commands='getcoms'), F.from_user.id.in_(get_users()))
+async def get_all_commands(message: Message):
+    txt = '/start\n/help\n/quote\n/del_...\n/ban_...\n/send_..\n/new_quote\n/remove_quote ...\n/get_statham_db\n/send_tier_list\n/send_tier_list_notdel\n/password_yaincel\n/get_users_info_db\n/get_weekly_db\n/get_sluts_db\n/weekly_off\n/weekly_on\n/get_ban\n/getcoms'
+    await message.answer(text=txt, reply_markup=basic_keyboard)
 
 
 @dp.message(Command(commands='get_weekly_db'))
@@ -492,8 +548,7 @@ async def send_weekly_db(message: Message, state: FSMContext):
         if db is None:
             await message.answer(text='БД пустая', reply_markup=basic_keyboard)
             return
-        txt = map(str, db)
-        txt = '\n'.join(txt)
+        txt = str(db)
         for i in range((len(txt) + 4096) // 4096):
             await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
 
@@ -537,12 +592,23 @@ async def send_sluts_db(message: Message, state: FSMContext):
             await message.answer(text=txt[i * 4096:(i + 1) * 4096], reply_markup=basic_keyboard)
 
 
+@dp.message(F.content_type.in_({ContentType.PHOTO, ContentType.TEXT}), StateFilter(FSMFillForm.sendQuote))
+async def insert_new_quote(message: Message, state: FSMContext):
+    await state.clear()
+    if message.text:
+        insert_quote(photo=None, caption=message.text)
+    else:
+        file_id = message.photo[-1].file_id
+        insert_quote(photo=file_id, caption=message.caption)
+    await message.answer(text='Цитата зафиксирована 👍', reply_markup=basic_keyboard)
+
+
 @dp.message(F.text == 'яинцел')
 async def get_verified(message: Message, state: FSMContext):
     set_verified(id=message.from_user.id)
     await message.answer(
-        text='Легенда! Теперь ты в нашей банде. Просто пришли мне фото, и его смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к фото и отправь мне, она будет показана в канале по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки',
-        reply_markup=basic_keyboard)
+        text='Легенда! Теперь ты в нашей банде. Просто пришли мне фото, и его смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к фото и отправь мне, она будет показана в <a href="https://t.me/+D_c0v8cHybY2ODQy">канале</a> по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки.',
+        disable_web_page_preview=True, reply_markup=basic_keyboard)
     await state.set_state(FSMFillForm.verified)
 
 
@@ -620,7 +686,7 @@ async def remember_to_rate(message: Message, state: FSMContext):
     await message.answer(text='Поставь оценку, сука!')
 
 
-@dp.message(F.photo)
+@dp.message(F.photo, ~StateFilter(FSMFillForm.sendDM))
 async def default_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     file_id = message.photo[-1].file_id
@@ -634,7 +700,7 @@ async def default_photo(message: Message, state: FSMContext):
             return
         try:
             await message.answer('Фото пройдет ✅ автоматическую модерацию и будет оценено нейросетью 🧠, ожидайте. Это займет астрономическое количество времени 🕘',
-                             reply_markup=ReplyKeyboardRemove())
+                             reply_markup=not_incel_keyboard)
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
         caption = '' if message.caption is None else message.caption
@@ -678,7 +744,7 @@ async def stat_photo(message: Message, state: FSMContext):
             os.remove(f'myplot_{username}.png')
             os.remove(f'myplot_{username}2.png')
             await message.answer(
-                text=f'Ваше последнее фото на стадции оценки {len(get_votes(max_photo_id_by_username(username)).keys())/len(get_users())*100}%', reply_markup=not_incel_keyboard)
+                text=f'Ваше последнее фото на стадии оценки: {len(get_votes(max_photo_id_by_username(username)).keys())/len(get_users())*100:.2f}%', reply_markup=not_incel_keyboard)
         else:
             await message.answer(text='Ты еще не присылал никаких фото', reply_markup=not_incel_keyboard)
         return
@@ -708,6 +774,7 @@ async def stat_photo(message: Message, state: FSMContext):
         if result[1] == -1:
             await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
+        await message.answer('Бля, иди нахуй реально!', reply_markup=not_incel_keyboard)
         return
     last_rate = get_last_rate(message.from_user.id)
     if last_rate == 0 or last_rate == 5:
@@ -719,15 +786,6 @@ async def stat_photo(message: Message, state: FSMContext):
 
 @dp.message(StateFilter(FSMFillForm.sendDM))
 async def stat_photo(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
-    if not result[0]:
-        if result[1] == -1:
-            await state.set_state(FSMFillForm.banned)
-            await message.answer('Тебе недоступна данная команда(', reply_markup=ReplyKeyboardRemove())
-            return
-        await message.answer('Тебе недоступна данная команда(', reply_markup=ReplyKeyboardRemove())
-        await state.clear()
-        return
     if current_dm_id.get(message.from_user.id, 0) == 0:
         await message.answer(text='Произошла ошибка', reply_markup=basic_keyboard)
         await state.clear()
@@ -752,7 +810,7 @@ async def stat_photo(message: Message, state: FSMContext):
                                from_chat_id=message.chat.id)
         await message.answer(text='Сообщение отправлено!', reply_markup=basic_keyboard)
     except Exception as e:
-        await message.answer(text=f'Произошла ошибка!\nПользователь заблокировал бота!')
+        await message.answer(text=f'Произошла ошибка!\nПользователь заблокировал бота 😰')
     current_dm_id[message.from_user.id] = 0
     await state.clear()
 
@@ -767,7 +825,7 @@ async def u_r_wellcome(message):
 
 @dp.message(
     lambda message: message.text is not None and (
-            message.text.lower() == 'иди нахуй' or message.text.lower() == 'пошел нахуй' or message.text.lower() == 'иди на хуй'))
+            message.text.lower() == 'иди нахуй' or message.text.lower() == 'пошел нахуй' or message.text.lower() == 'иди на хуй' or message.text.lower() == 'сука'))
 async def fuckoff(message):
     await bot.send_sticker(chat_id=message.chat.id,
                            sticker='CAACAgEAAxkBAAEKSrVlAiPwEKrocvOADTQWgKGACLGGlwAChAEAAnY3dj_hnFOGe-uonzAE')
@@ -777,6 +835,10 @@ async def fuckoff(message):
 async def ik(message):
     await message.answer('я знаю')
 
+
+@dp.message(F.from_user.id.in_(get_users()))
+async def any_message_from_incel(message: Message, state: FSMContext):
+    await message.answer(text=random.choice(hz_answers), reply_markup=basic_keyboard)
 
 @dp.message()
 async def any_message(message: Message, state: FSMContext):
@@ -791,35 +853,46 @@ async def any_message(message: Message, state: FSMContext):
         await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
         await state.set_state(FSMFillForm.banned)
         return
-    await message.answer(text='я не понимаю, о чем ты', reply_markup=basic_keyboard)
+    await message.answer(text=random.choice(hz_answers), reply_markup=not_incel_keyboard)
 
 
 async def weekly_tierlist(delete=1, automatic=1):
     if get_weekly(972753303):
-        try:
-            d = get_weekly_db()
-            new_d = {}
-            cnt = 1
-            for key, values in d.items():
-                for value in values:
-                    f = await bot.get_file(value)
-                    f_path = f.file_path
-                    await bot.download_file(f_path, f"test_{cnt}.jpg")
-                    new_d[key] = [f"test_{cnt}.jpg"] + new_d.get(key, [])
-                    cnt += 1
-            draw_tier_list(new_d)
-            for i in range(1, cnt):
+        d = get_weekly_db()
+        new_d = {}
+        cnt = 1
+        for key, values in d.items():
+            for value in values:
+                f = await bot.get_file(value)
+                f_path = f.file_path
+                await bot.download_file(f_path, f"test_{cnt}.jpg")
+                new_d[key] = [f"test_{cnt}.jpg"] + new_d.get(key, [])
+                cnt += 1
+        image_path = Path(f"test_{cnt}.jpg").resolve()
+        await bot.send_message(chat_id=972753303, text=f'Папка, куда скачались фото {image_path}')
+        res = draw_tier_list(new_d)
+        if res is not None:
+            await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
+        for i in range(1, cnt):
+            try:
                 os.remove(f"test_{i}.jpg")
-            photo = FSInputFile("tier_list.png")
+            except Exception as e:
+                image_path = Path(f"test_{i}.jpg").resolve()
+                await bot.send_message(chat_id=972753303, text=f'{e}\nПапка, где должны удалиться файлы: {image_path}')
+                return
+        photo = FSInputFile("tier_list.png")
+        try:
             if automatic:
                 await bot.send_document(document=photo, chat_id=channel_id, caption='<b>Еженедельный тир лист ❤️</b>')
             else:
                 await bot.send_document(document=photo, chat_id=channel_id, caption='<b>Текущий тир лист ❤️</b>')
             os.remove("tier_list.png")
-            if delete:
-                clear_db()
         except Exception as e:
-            await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
+            image_path = Path("tier_list.png").resolve()
+            await bot.send_message(chat_id=972753303, text=f'{e}\nПапка, где должен быть тирлист: {image_path}')
+            return
+        if delete:
+            clear_db()
     else:
         await bot.send_message(chat_id=972753303, text='Тир лист отключен',reply_markup=basic_keyboard)
 

@@ -1,12 +1,13 @@
 from PIL import Image, ImageDraw, ImageFont
 from math import ceil
+from pathlib import Path
 
 d = {
-    5: ['image5.jpg'],
-    4: ['image4.jpg'],
-    3: ['image3.jpg'],
-    2: ['image2.jpg'],
-    1: ['image1.jpg']
+    5: ['image5.png'],
+    4: ['image4.png'],
+    3: ['image3.png'],
+    2: ['image2.png'],
+    1: ['image1.png']
 }
 
 
@@ -17,8 +18,7 @@ def draw_tier_list(rates: dict):
     tiers = {5: 'S', 4: 'A', 3: 'B', 2: 'C', 1: 'D', 0: 'E'}
     background_color = (26, 26, 23)
     text_color = (0, 0, 0)
-    bold_font = ImageFont.truetype('Noah ExtraBold.ttf', 170)
-
+    bold_font = ImageFont.truetype('Ubuntu-R.ttf', 170)
     sum = 0
     for key, value in rates.items():
         if len(value) > 10:
@@ -34,8 +34,10 @@ def draw_tier_list(rates: dict):
     height = sum * image_height
 
     # Создание нового изображения тирлиста
+
     thumbnails = Image.new('RGB', (width, height), background_color)
     draw = ImageDraw.Draw(thumbnails)
+
 
     # Координаты, с которых начинаются размещения картинок в тирлисте
     x = 0
@@ -95,4 +97,6 @@ def draw_tier_list(rates: dict):
     # Сохранение тирлиста в файл
     thumbnails.save("tier_list.png")
 
-# draw_tier_list(d)
+
+if __name__ == '__main__':
+    print(draw_tier_list(d))
