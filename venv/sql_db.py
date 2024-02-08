@@ -56,7 +56,11 @@ def add_to_queue(id, num):
     conn.commit()
 
 
-def delete_from_queue(id, num):
+def delete_from_queue(id, num=0):
+    if num==0:
+        cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (None, id,))
+        conn.commit()
+        return
     cursor.execute("SELECT queue FROM users_info WHERE id=?", (id,))
     result = cursor.fetchone()[0]
     if result is None or result == '':

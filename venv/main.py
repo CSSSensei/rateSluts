@@ -33,7 +33,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import FSInputFile, InputMediaPhoto
+from aiogram.types import FSInputFile, InputMediaPhoto, InputMediaDocument
 from aiogram.types import (KeyboardButton, Message, ReplyKeyboardMarkup,
                            ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ContentType,
                            MessageReactionUpdated)
@@ -260,7 +260,7 @@ async def send_results(num: int, rate: str):
                 emoji_loc = '📉'
             else:
                 emoji_loc = '📈'
-            caption = f'Привет, {origin}. Ваше фото оценено на <b>{rate} из 10</b> {emoji_loc}\n<span class="tg-spoiler">(Внимание! Нейросеть только обучается)</span>'
+            caption = f'Привет, {origin}. Твое фото оценено на <b>{rate} из 10</b> {emoji_loc}\n<span class="tg-spoiler">(Внимание! Нейросеть только обучается)</span>'
             try:
                 await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption, reply_markup=not_incel_keyboard)
             except Exception as e:
@@ -472,8 +472,11 @@ async def quote(message: Message):
                         caption = '<blockquote>' + result[1][:result[1].find('(') - 1] + '</blockquote>' + result[1][result[1].find('('):]
                 await message.answer_photo(photo=result[0], caption=caption, reply_markup=markup_local)
             else:
-                block = result[1][:result[1].find("(") - 1]
-                await message.answer(text=f'<blockquote>{block}</blockquote>', reply_markup=markup_local)
+                if result[1].lower().count('(с)') + result[1].lower().count('(c)') + result[1].count('©') == 0:
+                    caption = f'<blockquote>{result[1]}</blockquote>'
+                else:
+                    caption = '<blockquote>' + result[1][:result[1].find('(') - 1] + '</blockquote>' + result[1][result[1].find('('):]
+                await message.answer(text=caption, reply_markup=markup_local)
             return
         else:
             response = requests.get(url, params=params)
@@ -510,8 +513,11 @@ async def process_more_press(callback: CallbackQuery):
                         caption = '<blockquote>' + result[1][:result[1].find('(')-1] + '</blockquote>'+ result[1][result[1].find('('):]
                 await callback.message.answer_photo(photo=result[0], caption=caption, reply_markup=markup_local)
             else:
-                block = result[1][:result[1].find("(")-1]
-                await callback.message.answer(text=f'<blockquote>{block}</blockquote>', reply_markup=markup_local)
+                if result[1].lower().count('(с)') + result[1].lower().count('(c)') + result[1].count('©') == 0:
+                    caption = f'<blockquote>{result[1]}</blockquote>'
+                else:
+                    caption = '<blockquote>' + result[1][:result[1].find('(') - 1] + '</blockquote>' + result[1][result[1].find('('):]
+                await callback.message.answer(text=caption, reply_markup=markup_local)
             return
         else:
             response = requests.get(url, params=params)
@@ -564,6 +570,47 @@ async def send_clear_users_db(message: Message, state: FSMContext):
         await message.answer(text=txt, reply_markup=basic_keyboard)
     except Exception as e:
         await message.answer(text=f'Ошибка! {e}', reply_markup=basic_keyboard)
+
+
+@dp.message(Command(commands='clear_queue'), F.from_user.id.in_(get_users()))
+async def clear_queue(message: Message, state: FSMContext):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        try:
+            for user in get_users():
+                delete_from_queue(id=user)
+                add_current_state(id=user, num=0)
+            await message.answer(text='Очереди очищены 🫡')
+        except Exception as e:
+            await message.answer(text=f'Произошла ошибка! {e}')
+
+
+@dp.message(Command(commands='clear_states'), F.from_user.id.in_(get_users()))
+async def clear_state(message: Message, state: FSMContext):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=basic_keyboard)
+    else:
+        try:
+            for user in get_users():
+                add_current_state(id=user, num=0)
+            await message.answer(text='Состояния очищены 🫡')
+        except Exception as e:
+            await message.answer(text=f'Произошла ошибка! {e}')
+
+
+@dp.message(Command(commands='backup'), F.from_user.id.in_(get_users()))
+async def backup_files(message: Message):
+    try:
+        doc = InputMediaDocument(media=FSInputFile("slutsDB.db"))
+        doc2 = InputMediaDocument(media=FSInputFile("usersDB.db"))
+        doc3 = InputMediaDocument(media=FSInputFile("weekly.db"))
+        doc4 = InputMediaDocument(media=FSInputFile("weekly_info.db"))
+        doc5 = InputMediaDocument(media=FSInputFile("statham.db"),
+                                  caption=f'Бэкап <i>{datetime.datetime.now().date()}</i>')
+        await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5], chat_id=message.chat.id)
+    except Exception as e:
+        await bot.send_message(chat_id=972753303, text=f'Произошла ошибка при отправке файлов для бэкапа\n{e}')
 
 
 @dp.message(Command(commands='get_users_info_db'), F.from_user.id.in_(get_users()))
@@ -630,7 +677,7 @@ async def send_statham_db(message: Message):
 
 @dp.message(Command(commands='getcoms'), F.from_user.id.in_(get_users()))
 async def get_all_commands(message: Message):
-    txt = '/start\n/help\n/quote\n/del_...\n/ban_...\n/send_..\n/new_quote\n/remove_quote ...\n/queue\n/get_statham_db\n/send_tier_list\n/send_tier_list_notdel\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/get_ban\n/password_yaincel\n/getcoms'
+    txt = '/start\n/help\n/quote\n/del_...\n/ban_...\n/send_..\n/new_quote\n/remove_quote ...\n/queue\n/backup\n/get_statham_db\n/send_tier_list\n/send_tier_list_notdel\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/get_ban\n/password_yaincel\n/getcoms'
     await message.answer(text=txt, reply_markup=basic_keyboard)
 
 
@@ -707,7 +754,11 @@ async def send_latest_sluts_db(message: Message, state: FSMContext):
                 for key, value in json.loads(i[2]).items():
                     rates += f'<i>{key}</i> – {value}, '
                 rates = rates[:-2] + '</blockquote>'
-            txt += f'№ {i[0]} Автор: @{i[-1]}. {rates}\n'
+            if i[1] is None:
+                caption = ''
+            else:
+                caption = f'"<i>{i[1]}</i>" | '
+            txt += f'№ {i[0]} Автор: @{i[-1]} | {caption}{rates}\n'
         await message.answer(text=txt, reply_markup=basic_keyboard)
 
 
@@ -815,6 +866,13 @@ async def default_photo(message: Message, state: FSMContext):
             await message.answer('Ты заблокирован! 💀', reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
+        caption = '' if message.caption is None else message.caption
+        if caption != '':
+            add_note(last_num + 1, message.caption)
+            caption = f'\n"{caption}"'
+        await bot.send_photo(972753303, photo=message.photo[-1].file_id,
+                             caption=f'Фото от пользователя <i>@{message.from_user.username}</i><i>{caption}</i>',
+                             reply_markup=moderate_keyboard(last_num + 1, message.from_user.username))
         try:
             await message.answer('Твое фото уже оценивается нейросетью 🧠, это может занять некоторое время ⌛️',
                                  reply_markup=not_incel_keyboard)
@@ -828,13 +886,6 @@ async def default_photo(message: Message, state: FSMContext):
             await bot.delete_message(chat_id=message.chat.id, message_id=msg.message_id)
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
-        caption = '' if message.caption is None else message.caption
-        if caption != '':
-            add_note(last_num + 1, message.caption)
-            caption = f'\n"{caption}"'
-        await bot.send_photo(972753303, photo=message.photo[-1].file_id,
-                             caption=f'Фото от пользователя <i>@{message.from_user.username}</i><i>{caption}</i>',
-                             reply_markup=moderate_keyboard(last_num + 1, message.from_user.username))
         return
 
 
@@ -945,7 +996,7 @@ async def stat_photo(message: Message, state: FSMContext):
             message.text.lower() == 'спасибо' or message.text.lower() == 'от души' or message.text.lower() == 'благодарю' or message.text.lower() == 'спс'))
 async def u_r_wellcome(message: Message):
     await bot.set_message_reaction(chat_id=message.chat.id, message_id=message.message_id,
-                                   reaction=[ReactionTypeEmoji(emoji='❤️')])
+                                   reaction=[ReactionTypeEmoji(emoji='❤️')], is_big=True)
     await bot.send_sticker(chat_id=message.chat.id,
                            sticker='CAACAgEAAxkBAAEKShplAfTsN4pzL4pB_yuGKGksXz2oywACZQEAAnY3dj9hlcwZRAnaOjAE', reply_to_message_id=message.message_id)
 
@@ -955,7 +1006,7 @@ async def u_r_wellcome(message: Message):
             message.text.lower() == 'иди нахуй' or message.text.lower() == 'пошел нахуй' or message.text.lower() == 'иди на хуй' or message.text.lower() == 'сука'))
 async def fuckoff(message):
     await bot.set_message_reaction(chat_id=message.chat.id, message_id=message.message_id,
-                                   reaction=[ReactionTypeEmoji(emoji='🤡')])
+                                   reaction=[ReactionTypeEmoji(emoji='🤡')], is_big=True)
     await bot.send_sticker(chat_id=message.chat.id,
                            sticker='CAACAgEAAxkBAAEKSrVlAiPwEKrocvOADTQWgKGACLGGlwAChAEAAnY3dj_hnFOGe-uonzAE')
 
@@ -963,7 +1014,7 @@ async def fuckoff(message):
 @dp.message(lambda message: message.text is not None and message.text.lower() == 'я гей')
 async def ik(message):
     await bot.set_message_reaction(chat_id=message.chat.id, message_id=message.message_id,
-                                   reaction=[ReactionTypeEmoji(emoji='💅')])
+                                   reaction=[ReactionTypeEmoji(emoji='💅')], is_big=True)
     await message.answer('я знаю', reply_to_message_id=message.message_id)
 
 
@@ -981,7 +1032,7 @@ async def dice_message(message: Message):
         await message.answer(text='АХУЕЕЕЕТЬ\nКРАСАВА\nЛУЧШИЙ')
         if emoji == '🎰':
             await bot.set_message_reaction(chat_id=message.chat.id, message_id=message.message_id,
-                                           reaction=[ReactionTypeEmoji(emoji='🤯')])
+                                           reaction=[ReactionTypeEmoji(emoji='🤯')], is_big=True)
             await bot.send_sticker(chat_id=message.chat.id,
                                    sticker='CAACAgIAAxkBAAELO0dlrmyiCn3T4rSpqM3zyjNv2ksI5AACowADDPlNDMG5-fZfTkbJNAQ')
     else:
@@ -1010,6 +1061,16 @@ async def any_message(message: Message, state: FSMContext):
 
 
 async def weekly_tierlist(delete=1, automatic=1):
+    try:
+        doc = InputMediaDocument(media=FSInputFile("slutsDB.db"))
+        doc2 = InputMediaDocument(media=FSInputFile("usersDB.db"))
+        doc3 = InputMediaDocument(media=FSInputFile("weekly.db"))
+        doc4 = InputMediaDocument(media=FSInputFile("weekly_info.db"))
+        doc5 = InputMediaDocument(media=FSInputFile("statham.db"),
+                                  caption=f'Бэкап <i>{datetime.datetime.now().date()}</i>')
+        await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5], chat_id=972753303)
+    except Exception as e:
+        await bot.send_message(chat_id=972753303, text=f'Произошла ошибка при отправке файлов для бэкапа\n{e}')
     if get_weekly(972753303):
         d = get_weekly_db()
         new_d = {}
@@ -1048,6 +1109,7 @@ async def weekly_tierlist(delete=1, automatic=1):
             clear_db()
     else:
         await bot.send_message(chat_id=972753303, text='Тир лист отключен',reply_markup=basic_keyboard)
+
 
 async def notify():
     for user in get_users():
