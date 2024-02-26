@@ -3,56 +3,52 @@ import sqlite3
 import json
 from typing import Dict
 
-# Creating a database connection
+
 conn = sqlite3.connect('usersDB.db')
 cursor = conn.cursor()
 
-# Creating a table with id and info columns
+
 cursor.execute('''CREATE TABLE IF NOT EXISTS users_info 
                   (id INTEGER PRIMARY KEY, username TEXT, banned BOOl, verified BOOL, attempts INTEGER, photos_ids TEXT, current INT, queue TEXT)''')
 
 
-# Function to check if id exists in the database
-def check_id(id: int, username: str) -> bool:
-    # Checking if id exists
-    cursor.execute("SELECT verified FROM users_info WHERE id=?", (id,))
-    result = cursor.fetchone()
 
-    if result is None:
+def check_id(id: int, username: str) -> bool:
+    cursor.execute("SELECT verified FROM users_info WHERE id=?", (id,))
+    user_is_verified = cursor.fetchone()
+
+    if user_is_verified is None:
         cursor.execute("INSERT INTO users_info (id, username, verified, banned, attempts) VALUES (?, ?, ?, ?, ?)",
                        (id, username, False, False, 5))
         conn.commit()
         return [False, 5]
 
-    verified = True if result[0] else False
+    verified = True if user_is_verified[0] else False
     if verified:
         return [True]
     cursor.execute("SELECT banned FROM users_info WHERE id=?", (id,))
-    result = cursor.fetchone()
-    if result[0]:
+    user_is_banned = cursor.fetchone()
+    if user_is_banned[0]:
         return [False, -1]
 
     cursor.execute("SELECT attempts FROM users_info WHERE id=?", (id,))
-    result = cursor.fetchone()[0]
-    if result <= 0:
+    attempts_amount = cursor.fetchone()[0]
+    if attempts_amount <= 0:
         cursor.execute("UPDATE users_info SET banned=?, attempts=? WHERE id=?", (True, 0, id,))
         conn.commit()
-    # else:
-    #     cursor.execute("UPDATE users_info SET attempts=? WHERE id=?", (result - 1, id,))
-    #     conn.commit()
-    return [False, result]
+    return [False, attempts_amount]
 
 
 def add_to_queue(id, num):
     cursor.execute("SELECT queue FROM users_info WHERE id=?", (id,))
-    result = cursor.fetchone()[0]
-    if result is None or result == '':
-        result = str(num)
+    queue = cursor.fetchone()[0]
+    if queue is None or queue == '':
+        queue = str(num)
     else:
-        result = set(map(int, result.split(',')))
-        result.add(num)
-        result = ', '.join(map(str, result))
-    cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (result, id,))
+        queue = set(map(int, queue.split(',')))
+        queue.add(num)
+        queue = ', '.join(map(str, queue))
+    cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (queue, id,))
     conn.commit()
 
 
@@ -62,51 +58,58 @@ def delete_from_queue(id, num=0):
         conn.commit()
         return
     cursor.execute("SELECT queue FROM users_info WHERE id=?", (id,))
-    result = cursor.fetchone()[0]
-    if result is None or result == '':
+    queue = cursor.fetchone()[0]
+    if queue is None or queue == '':
         return
     else:
-        result = set(map(int, result.split(',')))
-        if num in result:
-            result.remove(num)
-            if len(result) == 0:
-                result = None
-                cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (result, id,))
+        queue = set(map(int, queue.split(',')))
+        if num in queue:
+            queue.remove(num)
+            if len(queue) == 0:
+                queue = None
+                cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (queue, id,))
                 conn.commit()
                 return
-        result = ', '.join(map(str, result))
-    cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (result, id,))
+        queue = ', '.join(map(str, queue))
+    cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (queue, id,))
     conn.commit()
 
 
 def get_id_by_username(un):
     cursor.execute("SELECT id FROM users_info WHERE username=?", (un,))
-    result = cursor.fetchone()
-    if result is None:
+    user_id = cursor.fetchone()
+    if user_id is None:
         return None
-    return result[0]
+    return user_id[0]
 
 
 def get_queue(id):
     cursor.execute("SELECT queue FROM users_info WHERE id=?", (id,))
-    result = cursor.fetchone()[0]
-    if result is None or result == '':
+    queue = cursor.fetchone()[0]
+    if queue is None or queue == '':
         return set()
-    return set(map(int, result.split(',')))
+    return set(map(int, queue.split(',')))
 
 
 def reduce_attempts(id: int):
     cursor.execute("SELECT attempts FROM users_info WHERE id=?", (id,))
-    result = cursor.fetchone()[0]
-    cursor.execute("UPDATE users_info SET attempts=? WHERE id=?", (result - 1, id,))
+    attempts = cursor.fetchone()[0]
+    cursor.execute("UPDATE users_info SET attempts=? WHERE id=?", (attempts - 1, id,))
     conn.commit()
-    return result
+    return attempts
 
 
-def set_verified(id: int()):
-    cursor.execute("UPDATE users_info SET verified=?, banned=?, attempts=?, current=? WHERE id=?",
-                   (True, False, 0, 0, id))
-    conn.commit()
+def set_verified(id: int):
+    cursor.execute("SELECT * FROM users_info WHERE id=?", (id,))
+    rows = cursor.fetchall()
+    if not rows:
+        cursor.execute("INSERT INTO users_info (id, verified, current, banned) VALUES (?, ?, ?, ?)",
+                       (id, True, 0, False))
+        conn.commit()
+    else:
+        cursor.execute("UPDATE users_info SET verified=?, banned=?, current=? WHERE id=?",
+                       (True, False, 0, id))
+        conn.commit()
 
 
 def get_users() -> set:
@@ -179,9 +182,9 @@ def delete_row(username):
 
 def check_user(username):
     cursor.execute("SELECT id FROM users_info WHERE username=?", (username,))
-    result = cursor.fetchone()
-    if result is not None:
-        return result[0]
+    user_id = cursor.fetchone()
+    if user_id is not None:
+        return user_id[0]
     return None
 
 

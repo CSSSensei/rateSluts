@@ -6,7 +6,6 @@ from matplotlib.animation import FuncAnimation
 
 
 def get_statistics(username):
-    # Подключаемся к базе данных
     conn = sqlite3.connect('slutsDB.db')
     cursor = conn.cursor()
 
@@ -72,11 +71,10 @@ def new_func(username, averages):
     plt.savefig(f'myplot_{username}_pie.png')
     plt.clf()
 
-    #
 
     fig, ax = plt.subplots()
     ax.set_xlim(0, len(averages) + 5)
-    ax.set_ylim(0, 12)  # Обновляю ограничение по y
+    ax.set_ylim(0, 12)
 
     # Создаем пустой график, который будет обновляться с каждым кадром
     line, = ax.plot([], [], color='blue', linewidth=2)

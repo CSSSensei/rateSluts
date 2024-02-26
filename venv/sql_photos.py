@@ -26,8 +26,8 @@ def add_photo_id(num, file_id, username):
 
 def add_rate(num, username, rate):
     cursor.execute("SELECT votes FROM sluts_info WHERE id=?", (num,))
-    rows = cursor.fetchone()[0]
-    votes = {} if rows is None else json.loads(rows)
+    votes_rows = cursor.fetchone()[0]
+    votes = {} if votes_rows is None else json.loads(votes_rows)
     votes[username] = rate
     votes = json.dumps(votes)
     cursor.execute("UPDATE sluts_info SET votes=? WHERE id=?", (votes, num,))

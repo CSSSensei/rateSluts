@@ -1,6 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 from math import ceil
 from pathlib import Path
+import os
 
 d = {
     5: ['image5.png'],
@@ -95,8 +96,21 @@ def draw_tier_list(rates: dict):
                   fill=text_color)
 
     # Сохранение тирлиста в файл
-    thumbnails.save("tier_list.png")
+    file_path = 'tier_list.png'
+    thumbnails.save(file_path)
 
+    max_file_size_for_telegram = 49
+    required = max_file_size_for_telegram * 2 ** 20
+    file_size = os.path.getsize(file_path)
+    if file_size > required:
+        ratio = required / file_size
+        image = Image.open(file_path)
+        new_width = int(image.width * ratio ** 0.6)
+        new_height = int(image.height * ratio ** 0.6)
+        resized_image = image.resize((new_width, new_height))
+        resized_image.save('tier_list_compressed.png')
+    else:
+        image = Image.open(file_path).save('tier_list_compressed.png')
 
 if __name__ == '__main__':
     print(draw_tier_list(d))
