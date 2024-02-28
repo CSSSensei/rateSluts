@@ -22,8 +22,8 @@ def draw_tier_list(rates: dict):
     bold_font = ImageFont.truetype('Ubuntu-R.ttf', 170)
     sum = 0
     for key, value in rates.items():
-        if len(value) > 10:
-            sum += ceil(len(value) / 10)
+        if len(value) > 20:
+            sum += ceil(len(value) / 20)
         else:
             sum += 1
     # Размеры тирлиста и размер каждой картинки
@@ -31,7 +31,7 @@ def draw_tier_list(rates: dict):
     tier_height = 1000 // 2
     image_width = 750 // 2
     image_height = 1000 // 2
-    width = image_width * 10 + tier_width
+    width = image_width * 20 + tier_width
     height = sum * image_height
 
     # Создание нового изображения тирлиста
@@ -79,7 +79,7 @@ def draw_tier_list(rates: dict):
                 cropped_image = resized_image.crop((left, top, right, bottom))
                 thumbnails.paste(cropped_image, (x, y))
                 x += image_width
-            if cnt % 10 == 0 and cnt != list_length:
+            if cnt % 20 == 0 and cnt != list_length:
                 prev += 1
                 y += image_height
                 x = 0

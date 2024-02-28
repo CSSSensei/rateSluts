@@ -14,11 +14,13 @@ def get_max_id():
     max_id = cursor.fetchone()
     if max_id is not None:
         return max_id[0]
-    return 1
+    return None
 
 
 def get_randQuote():
     max_id = get_max_id()
+    if max_id is None:
+        return None
     random_number = random.randint(1, max_id)
     cursor.execute("SELECT photo_id FROM statham_quotes WHERE id=?", (random_number,))
     photo_id = cursor.fetchone()

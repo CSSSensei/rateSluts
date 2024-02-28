@@ -203,4 +203,4 @@ def print_db():
 
 if __name__ == '__main__':
     print_db()
-    print(get_last_commit(972753303))
+    print(get_users())

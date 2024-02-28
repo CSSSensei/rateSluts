@@ -24,7 +24,7 @@ if not admins:
     admins = cursor.fetchone()
     if admins is None:
         cursor.execute("INSERT INTO admins_info (id, active, trigger, day_of_week, hour, minute, mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (972753303, True, 'cron', '1, 2, 3, 4, 5, 6, 7', '20', '00', 2))
+            (972753303, True, '-1', '1, 2, 3, 4, 5, 6, 7', '20', '00', 2))
         conn.commit()
     else:
         cursor.execute("UPDATE admins_info SET active=True WHERE id=972753303")
@@ -37,17 +37,74 @@ def get_admins():
     return set(row[0] for row in rows)
 
 
+def get_message_to_delete(user_id):
+    cursor.execute("SELECT trigger FROM admins_info WHERE id=?", (user_id,))
+    rows = cursor.fetchone()[0]
+    if rows == '-1':
+        return None
+    return rows
+
+
+def set_message_to_delete(user_id, message_id: str):
+    cursor.execute("UPDATE admins_info SET trigger=? WHERE id=?", (message_id, user_id,))
+    conn.commit()
+
+
 def set_admin(user_id):
     cursor.execute("SELECT * FROM admins_info WHERE id=?", (user_id,))
     rows = cursor.fetchall()
     if not rows:
         cursor.execute("INSERT INTO admins_info (id, active, trigger, day_of_week, hour, minute, mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, True, 'cron', '1, 2, 3, 4, 5, 6, 7', '20', '00', 1))
+            (user_id, True, '-1', '1, 2, 3, 4, 5, 6, 7', '20', '00', 1))
         conn.commit()
 
     else:
         cursor.execute("UPDATE admins_info SET active=? WHERE id=?", (True, user_id,))
         conn.commit()
+
+
+def add_to_queue_group_photo(user_id: int, num: str):
+    cursor.execute("SELECT extra2 FROM admins_info WHERE id=?", (user_id,))
+    queue = cursor.fetchone()
+    if queue is None or queue[0] == '' or queue[0] is None:
+        queue = num
+    else:
+        queue = set(queue[0].split(', '))
+        queue.add(num)
+        queue = ', '.join(queue)
+    cursor.execute("UPDATE admins_info SET extra2=? WHERE id=?", (queue, user_id,))
+    conn.commit()
+
+
+def get_admins_queue(user_id: int):
+    cursor.execute("SELECT extra2 FROM admins_info WHERE id=?", (user_id,))
+    queue = cursor.fetchone()
+    if queue is None or queue[0] == '' or queue[0] is None:
+        return set()
+    return set(queue[0].split(', '))
+
+
+def remove_from_admins_queue(user_id, num):
+    if num==0:
+        cursor.execute("UPDATE admins_info SET extra2=? WHERE id=?", (None, user_id,))
+        conn.commit()
+        return
+    cursor.execute("SELECT extra2 FROM admins_info WHERE id=?", (user_id,))
+    queue = cursor.fetchone()
+    if queue is None or queue[0] == '' or queue[0] is None:
+        return
+    else:
+        queue = set(queue[0].split(', '))
+        if num in queue:
+            queue.remove(num)
+            if len(queue) == 0:
+                queue = None
+                cursor.execute("UPDATE admins_info SET extra2=? WHERE id=?", (queue, user_id,))
+                conn.commit()
+                return
+        queue = ', '.join(map(str, queue))
+    cursor.execute("UPDATE admins_info SET extra2=? WHERE id=?", (queue, user_id,))
+    conn.commit()
 
 
 def chill_mode(user_id):
@@ -80,7 +137,7 @@ def set_inactive(user_id: int):
     if not rows:
         cursor.execute(
             "INSERT INTO admins_info (id, active, trigger, day_of_week, hour, minute, mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, False, 'cron', '1, 2, 3, 4, 5, 6, 7', '20', '00', 1))
+            (user_id, False, '-1', '1, 2, 3, 4, 5, 6, 7', '20', '00', 1))
         conn.commit()
 
     else:
@@ -96,20 +153,20 @@ def get_settings(user_id: int):
 
 def get_weekdays(user_id: int):
     cursor.execute("SELECT day_of_week FROM admins_info WHERE id=?", (user_id,))
-    rows = cursor.fetchone()[0]
-    if rows is None:
+    rows = cursor.fetchone()
+    if rows is None or rows[0] is None:
         return set()
-    weekdays = set(map(int, rows.split(',')))
+    weekdays = set(map(int, rows[0].split(',')))
     return weekdays
 
 
 def change_weekdays(user_id: int, day: int):
     cursor.execute("SELECT day_of_week FROM admins_info WHERE id=?", (user_id,))
-    rows = cursor.fetchone()[0]
-    if rows is None:
+    rows = cursor.fetchone()
+    if rows is None or rows[0] is None:
         weekdays = str(day)
     else:
-        rows = set(map(int, rows.split(',')))
+        rows = set(map(int, rows[0].split(',')))
         if day in rows:
             rows.remove(day)
         else:
@@ -118,7 +175,10 @@ def change_weekdays(user_id: int, day: int):
             weekdays = None
         else:
             weekdays = ', '.join(map(str, rows))
-    cursor.execute("UPDATE admins_info SET day_of_week=? WHERE id=?", (weekdays, user_id,))
+    if weekdays is None:
+        cursor.execute("UPDATE admins_info SET day_of_week=NULL WHERE id=?", (user_id,))
+    else:
+        cursor.execute("UPDATE admins_info SET day_of_week=? WHERE id=?", (weekdays, user_id,))
     conn.commit()
 
 
@@ -134,6 +194,12 @@ def get_group_sets(group_id: int):
     return rows
 
 
+def send_photos_by_id(num: int):
+    cursor.execute("SELECT * FROM group_photos WHERE id=?", (num,))
+    rows = cursor.fetchone()
+    return rows
+
+
 def get_active_groups():
     cursor.execute("SELECT id FROM group_parser WHERE active=?", (True,))
     rows = cursor.fetchall()
@@ -142,10 +208,10 @@ def get_active_groups():
 
 def get_last_group():
     cursor.execute("SELECT MAX(id) FROM group_parser")
-    rows = cursor.fetchone()[0]
+    rows = cursor.fetchone()
     if rows is None:
         return 0
-    return rows
+    return rows[0] if rows[0] is not None else 0
 
 
 def switch_active(group_id: int):
@@ -203,8 +269,10 @@ def add_group(user_id: int, domain: str):
     return num, num
 
 
-def update_time(group_id: int, time=int(time.time())):
-    cursor.execute("UPDATE group_parser SET last_update=? WHERE id=?", (time, group_id))
+def update_time(group_id: int, time_now=None):
+    if time_now is None:
+        time_now = int(time.time())
+    cursor.execute("UPDATE group_parser SET last_update=? WHERE id=?", (time_now, group_id))
     conn.commit()
 
 
@@ -292,6 +360,7 @@ def check_hours(hour: str):
 
 
 if __name__ == '__main__':
+
     cursor.execute("SELECT * FROM admins_info")
     rows = cursor.fetchall()
     for row in rows:
@@ -302,7 +371,9 @@ if __name__ == '__main__':
         print(row)
     print()
 
-    cursor.execute("SELECT * FROM group_photos")
-    rows = cursor.fetchall()
-    for row in rows:
-        print(row)
+    # cursor.execute("SELECT * FROM group_photos")
+    # rows = cursor.fetchall()
+    # for row in rows:
+    #     print(row)
+    #
+    # send_photos_by_id(44)
