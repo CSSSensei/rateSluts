@@ -9,6 +9,40 @@ cursor = conn.cursor()
 # Creating a table with id and info columns
 cursor.execute('''CREATE TABLE IF NOT EXISTS sluts_info 
                   (id INTEGER PRIMARY KEY, note TEXT, votes TEXT, file_id TEXT, origin TEXT)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS average 
+                  (id INTEGER PRIMARY KEY, sum INTEGER, amount INTEGER)''')
+
+
+def add_rate_to_avg(user_id: int, rate: int):
+    cursor.execute("SELECT sum, amount FROM average WHERE id=?", (user_id,))
+    rate_rows = cursor.fetchone()
+    if rate_rows is None:
+        cursor.execute("INSERT INTO average (id, sum, amount) VALUES (?, ?, ?)",
+                       (user_id, rate, 1))
+        conn.commit()
+    else:
+        cursor.execute("UPDATE average SET sum=?, amount=? WHERE id=?",
+                       (rate_rows[0] + rate, rate_rows[1] + 1, user_id,))
+        conn.commit()
+
+
+def get_avg_rate(user_id: int):
+    cursor.execute("SELECT sum, amount FROM average WHERE id=?", (user_id,))
+    rate_rows = cursor.fetchone()
+    return rate_rows
+
+
+def change_avg_rate(user_id: int, sum: int, amount: int):
+    cursor.execute("SELECT sum, amount FROM average WHERE id=?", (user_id,))
+    rate_rows = cursor.fetchone()
+    if rate_rows is None:
+        cursor.execute("INSERT INTO average (id, sum, amount) VALUES (?, ?, ?)",
+                       (user_id, sum, amount))
+        conn.commit()
+    else:
+        cursor.execute("UPDATE average SET sum=?, amount=? WHERE id=?",
+                       (sum, amount, user_id,))
+        conn.commit()
 
 
 def get_last():
@@ -95,6 +129,11 @@ def print_db():
     rows = cursor.fetchall()
     for row in rows:
         print(row)
+    cursor.execute("SELECT * FROM average")
+    rows = cursor.fetchall()
+    for row in rows:
+        print(row, row[1] / row[2])
+
 
 
 if __name__ == '__main__':

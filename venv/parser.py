@@ -25,11 +25,13 @@ def get_posts(parameters: dict) -> dict:
         data = response.json()
         now = datetime.datetime.now()
         if int(parameters['time_delta']) == 0:
-            day1 = datetime.datetime(now.year, now.month, now.day - 1, now.hour, now.minute)
+            day1 = datetime.datetime(now.year, now.month, now.day, now.hour, now.minute) - datetime.timedelta(days=1)
             day2 = datetime.datetime(now.year, now.month, now.day, now.hour, now.minute)
         else:
-            day1 = datetime.datetime(now.year, now.month, now.day - int(parameters['time_delta']) - 1,  23, 59)
-            day2 = datetime.datetime(now.year, now.month, now.day - int(parameters['time_delta']), 23, 59, 0)
+            day1 = datetime.datetime(now.year, now.month, now.day, 23, 59) - datetime.timedelta(
+                days=1 + int(parameters['time_delta']))
+            day2 = datetime.datetime(now.year, now.month, now.day, 23, 59, 0) - datetime.timedelta(
+                days=int(parameters['time_delta']))
         unix_time_day1 = int(day1.timestamp())
         unix_time_day2 = int(day2.timestamp())
         cnt = 0
@@ -114,8 +116,8 @@ def check_valid_url(url: str):
 
 
 def format_text(text, domain, id):
-    n_max = 970
+    n_max = 700
     text = text.replace('<3', '❤️')
     if len(text) > n_max:
-        text = text[:n_max] + f'\n<i><a href="vk.com/{domain}?w=wall{id}">Читать далее</a></i>'
+        text = text[:n_max] + f'...\n<i><a href="vk.com/{domain}?w=wall{id}">Читать далее</a></i>'
     return text

@@ -51,7 +51,8 @@ from sql_db import check_id, reduce_attempts, set_verified, add_girlphoto, get_u
     get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username, check_user, \
     get_not_incel
 from sql_photos import get_last, add_photo_id, add_rate, add_note, get_photo_id_by_id, get_note_sql, get_votes, \
-    get_origin, max_photo_id_among_all, len_photos_by_username, max_photo_id_by_username, get_sluts_db
+    get_origin, max_photo_id_among_all, len_photos_by_username, max_photo_id_by_username, get_sluts_db, get_avg_rate, \
+    change_avg_rate, add_rate_to_avg
 from graphics import get_statistics
 from weekly_rates import add_to_weekly, clear_db, get_weekly_db, get_weekly, weekly_cancel, weekly_resume, \
     get_weekly_db_info
@@ -210,6 +211,17 @@ class ban_username(BaseFilter):
         return message.text[1:5] == 'ban_'
 
 
+class clear_states_username(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        return message.text[1:4] == 'cs_'
+
+
+class change_average_filter(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        return message.text[1:6] == 'cavg_'
+
+
+
 class send_DM(BaseFilter):
     async def __call__(self, message: Message) -> bool:
         return message.text[1:6] == 'send_'
@@ -234,6 +246,44 @@ async def ban_username(message: Message):
         await message.answer(text=f'Строка с username=<i>"{s}"</i> не найдена в таблице')
     else:
         await message.answer(text=f'Пользователь <i>@{s}</i> был успешно забанен!')
+
+
+@dp.message(F.text, clear_states_username())
+async def ban_username(message: Message):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=get_keyboard(message.from_user.id))
+        return
+    s = message.text[4:]
+    try:
+        add_current_state(id=get_id_by_username(s), num=0)
+        await message.answer(text=f'Состояние {s} очищено 🫡')
+    except Exception as e:
+        await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
+
+
+@dp.message(F.text, change_average_filter())
+async def ban_username(message: Message):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=get_keyboard(message.from_user.id))
+        return
+    pattern = r'/(\w+)_([\w\d]+)_([\d]+)_([\d]+)'
+    match = re.match(pattern, message.text)
+
+    if match:
+        try:
+            username = match.group(2)
+            sum_value = int(match.group(3))
+            amount = int(match.group(4))
+            user_id = get_id_by_username(username)
+            if user_id is None or sum_value <= 0 or amount <= 0:
+                await message.answer(text=f'Произошла ошибка! Ты еблан')
+                return
+            change_avg_rate(user_id, sum_value, amount)
+            await message.answer(f'Значения для {username} были изменены на {sum_value}, {amount}')
+        except Exception as e:
+            await message.answer(text=f'Произошла ошибка! Ты еблан\n{e}')
+    else:
+        await message.answer(text=f'Произошла ошибка! Неправильный паттерн')
 
 
 @dp.message(Command(commands='new_quote'), F.from_user.id.in_(incels))
@@ -306,7 +356,7 @@ async def del_username(message: Message):
         await message.answer(text=f'Строка с username=<i>"{s}"</i> была успешно удалена')
 
 
-def get_rates_keyboard(num: int, mailing: int):
+def get_rates_keyboard(num: int, mailing: int = 1):
     array_buttons: list[list[InlineKeyboardButton]] = [[], []]
     for i in range(12):
         array_buttons[i // 6].append(InlineKeyboardButton(
@@ -365,13 +415,24 @@ async def send_group_photo(user_id: int, num: str):
         await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 1\n{e}')
 
 
-async def notify_admin(user_id: int):
+async def notify_admin(user_id: int, message_id=0):
     sets = get_settings(user_id)
     if sets[6] is not None:
         groups_set = set(map(int, sets[6].split(',')))
+        if message_id != 0:
+            async with ChatActionSender(bot=bot, chat_id=user_id):
+                await bot.edit_message_text(chat_id=user_id, message_id=message_id,
+                                            text=f'Начал поиск фото по группам\n<code>{"0".rjust(len(str(len(groups_set))))} из {len(groups_set)}</code>  | <code>{("{:2.2f}".format(00.00) + "%").rjust(6)}</code>')
+        cnt_group = 0
         cnt = 0
         for group in groups_set:
             group_sets = get_group_sets(group)
+            if message_id != 0:
+                progress = cnt_group / len(groups_set)
+                async with ChatActionSender(bot=bot, chat_id=user_id):
+                    await bot.edit_message_text(chat_id=user_id, message_id=message_id,
+                                                text=f'Начал поиск фото по группам\n<code>{str(cnt_group).rjust(len(str(len(groups_set))))} из {len(groups_set)}</code>  | <code>{("{:.2f}".format(progress * 100) + "%").rjust(6)}</code> | <i>{group_sets[1]}</i>')
+            cnt_group += 1
             if not group_sets[2]:
                 continue
             parameters = {'domain': group_sets[1], 'top_likes': group_sets[3], 'photo_amount': group_sets[4],
@@ -425,6 +486,11 @@ async def notify_admin(user_id: int):
                         except Exception as e:
                             await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 3\n{e}')
             update_time(group)
+
+        if message_id != 0:
+            async with ChatActionSender(bot=bot, chat_id=user_id):
+                await bot.edit_message_text(chat_id=user_id, message_id=message_id,
+                                            text=f'Начал поиск фото по группам\n<code>{len(groups_set)} из {len(groups_set)}</code> | <code>100.00%</code>')
         if cnt == 0:
             await bot.send_message(chat_id=user_id, text=f'Фото с текущими фильтрами не нашлось 😨')
 
@@ -432,12 +498,17 @@ async def notify_admin(user_id: int):
 def get_text_of_settings(user_id: int) -> str:
     sets = get_settings(user_id)
     extra_emoji = '🧊' if sets[7] == 2 else ''
-    text = f'<b>⚙️{extra_emoji} Твои текущие настройки:</b>\n\n<blockquote>'
+    text = f'<b>⚙️{extra_emoji} Твои текущие настройки</b>\n<blockquote>'
+    groups_str = ''
     if sets[6] is not None:
+        text += '<b>Группы:\n</b>🔄    🔢    📅     <i>название\n'
         groups_set = set(map(int, sets[6].split(',')))
-        group_names = [f'<a href = "https://vk.com/{get_group_domain(group)}"><i>{get_group_domain(group)}</i></a>'
-                       for group in groups_set]
-        groups_str = f'<b>Группы:</b> {", ".join(group_names)}\n'
+        for group in groups_set:
+            settings = get_group_sets(group)
+            if not settings[2]:
+                continue
+            text += ['🆕      ', '👍      '][settings[3]] + str(settings[4]).ljust(9) + str(settings[5]).ljust(8) + f'<a href = "https://vk.com/{get_group_domain(group)}">{get_group_domain(group)}</a>\n'
+        text += '</i>'
     else:
         groups_str = '<i>У тебя пока нет групп</i>\n'
     week_array = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
@@ -448,7 +519,7 @@ def get_text_of_settings(user_id: int) -> str:
         weekday_str = weekday_str[:-2]
     else:
         weekday_str = 'ни один день недели не выбран, фото не будут присылаться'
-    extra = f'<b>Дни недели:</b> <i>{weekday_str}</i>\n<b>Время:</b> <i>{sets[4]}:{sets[5]}</i></blockquote>'
+    extra = f'\n<b>Дни недели:</b>\n<i>{weekday_str}</i>\n<b>Время:</b>\n<i>{sets[4]}:{sets[5]}</i></blockquote>'
     return text + groups_str + extra
 
 
@@ -500,7 +571,7 @@ def get_admin_keyboard(user_id: int, cancel_url_sending: bool = False, superuser
         return InlineKeyboardMarkup(inline_keyboard=array_buttons)
     row1 = [InlineKeyboardButton(text='Группы 👥', callback_data=AdminCallBack(action=1).pack()),
             InlineKeyboardButton(text='Оповещения 🔊', callback_data=AdminCallBack(action=2).pack())]
-    row2 = [InlineKeyboardButton(text='Получить фото ↩️', callback_data=AdminCallBack(action=3).pack()),
+    row2 = [InlineKeyboardButton(text='Получить фото ➡️', callback_data=AdminCallBack(action=3).pack()),
             InlineKeyboardButton(text='Уволиться 🚫', callback_data=AdminCallBack(action=0).pack())]
     array_buttons = [row1, row2]
     if user_id == 972753303:
@@ -557,7 +628,7 @@ def get_group_keyboard(groups_id: Union[List[int], None], go_back_to_menu: bool 
         for j in range(min(3, len(groups_id) - i * 3)):
             domain = get_group_domain(groups_id[i * 3 + j])
             emoji_loc = '🟢' if groups_id[i * 3 + j] in active_groups else '❌'
-            button = InlineKeyboardButton(text=domain + ' ' + emoji_loc,
+            button = InlineKeyboardButton(text=emoji_loc + ' ' + domain,
                                           callback_data=GroupCallBack(group_id=groups_id[i * 3 + j]).pack())
             loc_array.append(button)
         array_buttons.append(loc_array)
@@ -665,7 +736,7 @@ async def moderate_main_settings(callback: CallbackQuery, callback_data: AdminCa
             await callback.message.edit_text('👥 Ты еще не добавил ни одной группы!',
                                              reply_markup=get_group_keyboard(groups_id=None))
         else:
-            await notify_admin(callback.from_user.id)
+            await notify_admin(callback.from_user.id, callback.message.message_id)
             await callback.answer()
 
     elif action == 4:
@@ -689,12 +760,13 @@ async def send_next_photo(user_id: int):
     queue = get_admins_queue(user_id)
     if len(queue) == 0:
         return
-    i = next(iter(queue))
+    i = min(queue)
     remove_from_admins_queue(user_id, i)
+    extra = '' if len(queue) == 1 else f' | {len(queue) - 1} в очереди'
     if '-' not in i:
         async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
             photo = send_photos_by_id(int(i))
-            caption = f'👥 <b><a href="vk.com/{photo[1]}">{photo[1][:photo[1].find("?")]}</a></b>'
+            caption = f'👥 <b><a href="vk.com/{photo[1]}">{photo[1][:photo[1].find("?")]}</a></b>' + extra
             msg = await bot.send_photo(chat_id=user_id, photo=photo[3],
                                  caption=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
                                  reply_markup=get_manage_photo(ids=int(i)))
@@ -704,7 +776,7 @@ async def send_next_photo(user_id: int):
         num = list(map(int, i.split('-')))
         nums = [i for i in range(num[0], num[1] + 1)]
         photo = send_photos_by_id(nums[0])
-        caption = f'👥 <b><a href="vk.com/{photo[1]}">{photo[1][:photo[1].find("?")]}</a></b>'
+        caption = f'👥 <b><a href="vk.com/{photo[1]}">{photo[1][:photo[1].find("?")]}</a></b>' + extra
         media = []
         for num in nums:
             loc_photo = send_photos_by_id(num)
@@ -719,7 +791,7 @@ async def send_next_photo(user_id: int):
                                        disable_web_page_preview=True)
                 set_message_to_delete(user_id, f'{msg[0].message_id}-{msg[-1].message_id}')
         except Exception as e:
-            await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 4{e}')
+            await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 4\n{e}')
 
 
 @dp.callback_query(ManageSettings.filter())
@@ -920,7 +992,6 @@ async def get_caption_group(message: Message, state: FSMContext):
     caption_global[message.from_user.id]
     async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
         await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(num), caption=f'Охуенная заметка: <b><i>{message.text}</i></b>. А теперь оцени фото', reply_markup=get_rates_keyboard(num, 3))
-    add_current_state(message.from_user.id, -1, message.from_user.username)
     previous = get_message_to_delete(message.from_user.id)
     if '-' in previous:
         previous = list(map(int, previous.split('-')))
@@ -1002,62 +1073,73 @@ async def filter_rates(callback: CallbackQuery,
     votes = get_votes(num)
     photo_is_not_posted = True
     insert_last_rate(callback.from_user.id, num)
-    if mailing and len(votes.keys()) >= len(get_users()):
+    if mailing == 1 and len(votes.keys()) >= len(get_users()):
         photo_is_not_posted = False  # индикатор, который отвечает за публикацию поста в канал (для того чтобы после изменения оценки пост не выложился еще раз)
     add_rate(num, callback.from_user.username, callback_data.r)
     delete_from_queue(callback.from_user.id, num)
     if mailing == 1:
-        await callback.message.delete()
-        add_current_state(callback.from_user.id, 0, callback.from_user.username)
-        votes = get_votes(num)
-        if len(votes.keys()) + 1 == len(get_users()):
-            voted = set(votes.keys())
-            users = set()
-            for i in get_users():
-                users.add(get_username_by_id(i))
-            last_username = next(iter((users - voted)))
-            if last_username is not None and type(last_username) == str and len(last_username) > 0:
-                if get_id_by_username(last_username) is not None:
-                    if states_users.get(last_username, None) is None or states_users[last_username] + datetime.timedelta(hours=1) < datetime.datetime.now():
-                        await bot.send_message(
-                            text=f'<b>{last_username}</b>, ебать твой рот, нажми на кнопку, ты последний такой хуесос 😡',
-                            chat_id=get_id_by_username(last_username))
-                        states_users[last_username] = datetime.datetime.now()
+        try:
+            await callback.message.delete()
 
-        if len(votes.keys()) >= len(get_users()) and photo_is_not_posted:
+            votes = get_votes(num)
+            if len(votes.keys()) + 1 == len(get_users()):
+                voted = set(votes.keys())
+                users = set()
+                for i in get_users():
+                    users.add(get_username_by_id(i))
+                last_username = next(iter((users - voted)))
+                if last_username is not None and type(last_username) == str and len(last_username) > 0:
+                    if get_id_by_username(last_username) is not None:
+                        if states_users.get(last_username, None) is None or states_users[last_username] + datetime.timedelta(hours=1) < datetime.datetime.now():
+                            await bot.send_message(
+                                text=f'<b>{last_username}</b>, ебать твой рот, нажми на кнопку, ты последний такой хуесос 😡',
+                                chat_id=get_id_by_username(last_username))
+                            states_users[last_username] = datetime.datetime.now()
 
-            avg = sum(votes.values()) / len(votes.keys())
-            avg_str = '{:.2f}'.format(avg)
-            await send_results(num, avg_str)
-            extra = ''
-            spoiler = False
-            if avg == 0:
-                spoiler = True
-                extra = '<b>🚨Осторожно!🚨\nУберите от экранов детей и людей с тонкой душевной организацией. Данное фото может Вас шокировать\n\n</b>'
-            if avg == 11:
-                spoiler = True
-                extra = '<b>😍 Все участники банды инцелов оценили фото на 11 😍</b>\n\n'
+            if len(votes.keys()) >= len(get_users()) and photo_is_not_posted:
+                avg = sum(votes.values()) / len(votes.keys())
+                add_to_weekly(get_photo_id_by_id(num), avg)
+                avg_str = '{:.2f}'.format(avg)
+                await send_results(num, avg_str)
+                extra = ''
+                spoiler = False
+                if avg == 0:
+                    spoiler = True
+                    extra = '<b>🚨Осторожно!🚨\nУберите от экранов детей и людей с тонкой душевной организацией. Данное фото может Вас шокировать\n\n</b>'
+                if avg == 11:
+                    spoiler = True
+                    extra = '<b>😍 Все участники банды инцелов оценили фото на 11 😍</b>\n\n'
 
-            user_rates = ''
-            for key, value in votes.items():
-                user_rates += f'@{key}: <i>{value}</i>\n'
-            rounded = round(avg)
-            note_str = get_note_sql(num)
-            note_str = f': <blockquote>{note_str}</blockquote>\n' if note_str is not None else '\n\n'
-            name = get_origin(num)
-            name = '@' + name if name[0] != '👥' else f'👥 <a href="vk.com/{name[2:]}">{name[:name.find("?")][2:]}</a>'
-            txt = extra + f'Автор пикчи <b>{name}</b>' + note_str + "Оценки инцелов:\n" + user_rates + '\n' f'Общая оценка: <b>{avg_str}</b>' + f'\n<i>#{rate2[rounded].replace(" ", "_")}</i>'
-            await bot.send_photo(chat_id=channel_id, photo=get_photo_id_by_id(num), caption=txt,
-                                 has_spoiler=spoiler)
-            add_to_weekly(get_photo_id_by_id(num), avg)
-        q = get_queue(callback.from_user.id)
-        if len(q) == 0:
-            return
-        i = next(iter(q))
-        async with ChatActionSender(bot=bot, chat_id=callback.from_user.id, action='upload_photo'):
-            await bot.send_photo(callback.from_user.id, get_photo_id_by_id(i),
-                                 reply_markup=get_rates_keyboard(num=i, mailing=1))
-        add_current_state(callback.from_user.id, i, callback.from_user.username)
+                user_rates = ''
+                sorted_rates = sorted(votes.items(), key=lambda x: x[1], reverse=True)
+                for key, value in sorted_rates:
+                    user_id = get_id_by_username(key)
+                    if user_id is not None:
+                        add_rate_to_avg(user_id, value)
+                    user_rates += f'@{key}: <i>{value}</i>\n'
+                rounded = round(avg)
+                note_str = get_note_sql(num)
+                note_str = f': <blockquote>{note_str}</blockquote>\n' if note_str is not None else '\n\n'
+                name = get_origin(num)
+                name = '@' + name if name[0] != '👥' else f'👥 <a href="vk.com/{name[2:]}">{name[:name.find("?")][2:]}</a>'
+                txt = extra + f'Автор пикчи <b>{name}</b>' + note_str + "Оценки инцелов:\n" + user_rates + '\n' f'Общая оценка: <b>{avg_str}</b>' + f'\n<i>#{rate2[rounded].replace(" ", "_")}</i>'
+                await bot.send_photo(chat_id=channel_id, photo=get_photo_id_by_id(num), caption=txt,
+                                     has_spoiler=spoiler)
+        except Exception as e:
+            await bot.send_message(chat_id=972753303, text=f'Произошла ошибка после оценки фото № {num} пользователем {callback.from_user.username} \n{e}')
+        try:
+            q = get_queue(callback.from_user.id)
+            if len(q) == 0:
+                add_current_state(callback.from_user.id, 0, callback.from_user.username)
+                return
+            i = min(q)
+            async with ChatActionSender(bot=bot, chat_id=callback.from_user.id, action='upload_photo'):
+                await bot.send_photo(callback.from_user.id, get_photo_id_by_id(i),
+                                     reply_markup=get_rates_keyboard(num=i, mailing=1))
+            add_current_state(callback.from_user.id, i, callback.from_user.username)
+        except Exception as e:
+            await bot.send_message(chat_id=972753303,
+                                   text=f'Произошла ошибка! Пользователь {callback.from_user.username} не получил фото из очереди\n{e}')
         return
     elif mailing == 2:
         await callback.message.delete()
@@ -1271,7 +1353,7 @@ async def process_more_press(callback: CallbackQuery):
 
 
 @dp.message(Command(commands='get_users'), F.from_user.id.in_(incels))
-async def send_clear_users_db(message: Message, state: FSMContext):
+async def send_clear_users_db(message: Message):
     incels = get_users()
     db = get_usersinfo_db()
     if db is None:
@@ -1316,7 +1398,7 @@ async def send_clear_users_db(message: Message, state: FSMContext):
 
 
 @dp.message(Command(commands='clear_queue'), F.from_user.id.in_(get_users()))
-async def clear_queue(message: Message, state: FSMContext):
+async def clear_queue(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
     else:
@@ -1330,7 +1412,7 @@ async def clear_queue(message: Message, state: FSMContext):
 
 
 @dp.message(Command(commands='clear_states'), F.from_user.id.in_(get_users()))
-async def clear_state(message: Message, state: FSMContext):
+async def clear_state(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
     else:
@@ -1381,7 +1463,7 @@ async def default_mode_lol(message: Message):
 
 
 @dp.message(Command(commands='get_users_info_db'), F.from_user.id.in_(get_users()))
-async def send_users_db(message: Message, state: FSMContext):
+async def send_users_db(message: Message):
     db = get_usersinfo_db()
     if db is None:
         await message.answer(text='БД пустая')
@@ -1390,6 +1472,28 @@ async def send_users_db(message: Message, state: FSMContext):
     txt = '\n'.join(txt)
     for i in range((len(txt) + 4096) // 4096):
         await message.answer(text=txt[i * 4096:(i + 1) * 4096])
+
+
+@dp.message(Command(commands='avgs'), F.from_user.id.in_(get_users()))
+async def send_avgs(message: Message):
+    txt = '<b>Средние значения</b>\n'
+    mx_len_username = 0
+    averages = {}
+    for user in incels:
+        username = get_username_by_id(user)
+        if len(username) > mx_len_username:
+            mx_len_username = len(username)
+        average_tuple = get_avg_rate(user)
+        if average_tuple is None:
+            averages[username] = 0
+        else:
+            averages[username] = average_tuple[0] / average_tuple[1]
+    averages = sorted(averages.items(), key=lambda x: x[1], reverse=True)
+    for username, avg in averages:
+        if avg is None:
+            avg = 0
+        txt += f'<code>@{username.ljust(mx_len_username)}</code> | <b>{"{:.5f}".format(avg)}</b>\n'
+    await message.answer(txt)
 
 
 @dp.message(Command(commands='queue'), F.from_user.id.in_(get_users()))
@@ -1418,7 +1522,7 @@ async def get_queue_rates(message: Message):
 
 
 @dp.message(Command(commands='remove_quote'), F.from_user.id.in_(get_users()))
-async def remove_quote(message: Message, state: FSMContext):
+async def remove_quote(message: Message):
     if len(message.text) <= len('remove_quote') + 2:
         await message.answer(text='Произошла ошибка')
         return
@@ -1449,7 +1553,7 @@ async def get_all_commands(message: Message):
 
 
 @dp.message(Command(commands='get_weekly_db'))
-async def send_weekly_db(message: Message, state: FSMContext):
+async def send_weekly_db(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
     else:
@@ -1463,7 +1567,7 @@ async def send_weekly_db(message: Message, state: FSMContext):
 
 
 @dp.message(Command(commands='weekly_off'))
-async def weekly_cancel_func(message: Message, state: FSMContext):
+async def weekly_cancel_func(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
     else:
@@ -1472,7 +1576,7 @@ async def weekly_cancel_func(message: Message, state: FSMContext):
 
 
 @dp.message(Command(commands='weekly_on'))
-async def send_users_db_func(message: Message, state: FSMContext):
+async def send_users_db_func(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
     else:
@@ -1483,12 +1587,12 @@ async def send_users_db_func(message: Message, state: FSMContext):
 @dp.message(Command(commands='get_ban'))
 async def ban_user(message: Message, state: FSMContext):
     get_ban(message.from_user.id)
-    await message.answer(text='Вы исключены из банды инцелов', reply_markup=ReplyKeyboardRemove())
+    await message.answer(text='Ты исключен из банды инцелов', reply_markup=ReplyKeyboardRemove())
     await state.set_state(FSMFillForm.banned)
 
 
 @dp.message(Command(commands='get_sluts_db'))
-async def send_sluts_db(message: Message, state: FSMContext):
+async def send_sluts_db(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
     else:
@@ -1502,7 +1606,7 @@ async def send_sluts_db(message: Message, state: FSMContext):
 
 
 @dp.message(Command(commands='get_latest_sluts'))
-async def send_latest_sluts_db(message: Message, state: FSMContext):
+async def send_latest_sluts_db(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
     else:
@@ -1709,7 +1813,12 @@ async def stat_photo(message: Message, state: FSMContext):
         users = len(get_users())
         if votes > users:
             users = votes
-        await message.answer(text=f'Ваше последнее фото оценили {votes}/{users} человек')
+        average = get_avg_rate(message.from_user.id)
+        avg = ''
+        if average is not None:
+            avg_float = average[0] / average[1]
+            avg = f'\nCредняя оценка: <b>{"{:.2f}".format(avg_float)}</b> ' + emoji[round(avg_float)]
+        await message.answer(text=f'Твое последнее фото оценили {votes}/{users} человек ' + avg)
     else:
         await message.answer(text='Ты еще не присылал никаких фото')
 
@@ -1789,6 +1898,7 @@ async def fuckoff(message):
                                    reaction=[ReactionTypeEmoji(emoji='🤡')], is_big=True)
     await bot.send_sticker(chat_id=message.chat.id,
                            sticker='CAACAgEAAxkBAAEKSrVlAiPwEKrocvOADTQWgKGACLGGlwAChAEAAnY3dj_hnFOGe-uonzAE')
+
 
 @dp.message(lambda message: message.text is not None and message.text.lower() == 'я гей')
 async def ik(message):
@@ -1878,7 +1988,11 @@ async def weekly_tierlist(user=972753303):
                 new_d[key] = [f"test_{cnt}.jpg"] + new_d.get(key, [])
                 cnt += 1
         image_path = Path(f"test_{cnt}.jpg").resolve()
-        res = draw_tier_list(new_d)
+        try:
+            res = draw_tier_list(new_d)
+        except Exception as e:
+            await bot.send_message(chat_id=972753303, text=f'Ошибка при создании тир листа\n{e}')
+            return
         if res is not None:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
         for i in range(1, cnt):
@@ -1894,6 +2008,8 @@ async def weekly_tierlist(user=972753303):
                 await bot.send_document(document=photo, chat_id=channel_id, caption='<b>тир лист ❤️</b>')
             except:
                 await bot.send_message(chat_id=972753303, text=f'{e}\nПапка, где должен быть тирлист: {image_path}')
+        else:
+            await bot.send_message(chat_id=user, text='Тир лист отключен')
         try:
             client = yadisk.Client(token=ya_token)
             with client:
@@ -1924,12 +2040,7 @@ async def notify():
 async def main():
     scheduler: AsyncIOScheduler = AsyncIOScheduler(timezone=str(tzlocal.get_localzone()))
     scheduler.add_job(notify, trigger='cron', hour='9-22/3', minute=0)
-    scheduler.start()
-
-    scheduler2: AsyncIOScheduler = AsyncIOScheduler(timezone=str(tzlocal.get_localzone()))
-    trigger = CronTrigger(day_of_week='sun', hour=20, minute=0)
-    scheduler2.add_job(weekly_tierlist, trigger=trigger)
-
+    scheduler.add_job(weekly_tierlist, trigger=CronTrigger(day_of_week='sun', hour=20, minute=0))
 
     day_of_week_list = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
     for admin in get_admins():
@@ -1937,9 +2048,9 @@ async def main():
         days = get_weekdays(admin)
         for i in days:
             trigger = CronTrigger(day_of_week=day_of_week_list[i - 1], hour=int(sets[4]), minute=int(sets[5]))
-            scheduler2.add_job(notify_admin, trigger=trigger, args=(admin, ))
+            scheduler.add_job(notify_admin, trigger=trigger, args=(admin,))
 
-    scheduler2.start()
+    scheduler.start()
     await dp.start_polling(bot)
 
 
