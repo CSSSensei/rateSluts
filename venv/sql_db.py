@@ -9,7 +9,7 @@ cursor = conn.cursor()
 
 
 cursor.execute('''CREATE TABLE IF NOT EXISTS users_info 
-                  (id INTEGER PRIMARY KEY, username TEXT, banned BOOl, verified BOOL, attempts INTEGER, photos_ids TEXT, current INT, queue TEXT)''')
+                  (id INTEGER PRIMARY KEY, username TEXT, banned BOOl, verified BOOL, attempts INTEGER, photos_ids TEXT, current INT, queue TEXT, new_user BOOL)''')
 
 
 
@@ -18,10 +18,10 @@ def check_id(id: int, username: str) -> bool:
     user_is_verified = cursor.fetchone()
 
     if user_is_verified is None:
-        cursor.execute("INSERT INTO users_info (id, username, verified, banned, attempts) VALUES (?, ?, ?, ?, ?)",
-                       (id, username, False, False, 5))
+        cursor.execute("INSERT INTO users_info (id, username, verified, banned, attempts, new_user) VALUES (?, ?, ?, ?, ?, ?)",
+                       (id, username, False, False, 5, True))
         conn.commit()
-        return [False, 5]
+        return [False, 10]
 
     verified = True if user_is_verified[0] else False
     if verified:
@@ -37,6 +37,20 @@ def check_id(id: int, username: str) -> bool:
         cursor.execute("UPDATE users_info SET banned=?, attempts=? WHERE id=?", (True, 0, id,))
         conn.commit()
     return [False, attempts_amount]
+
+
+def check_new_user(id):
+    cursor.execute("SELECT new_user FROM users_info WHERE id=?", (id,))
+    user_is_new = cursor.fetchone()
+    if user_is_new is None:
+        cursor.execute("INSERT INTO users_info (id, new_user) VALUES (?, ?)", (id, False))
+        conn.commit()
+        return True
+    if user_is_new[0]:
+        cursor.execute("UPDATE users_info SET new_user=? WHERE id=?", (False, id))
+        conn.commit()
+        return True
+    return False
 
 
 def add_to_queue(id, num):

@@ -12,7 +12,7 @@ d = {
 }
 
 
-def draw_tier_list(rates: dict):
+def draw_tier_list(rates: dict, offset: int = 0):
     # цвета
     colors = {5: (255, 127, 127), 4: (255, 191, 127), 3: (255, 255, 127), 2: (191, 255, 127), 1: (127, 255, 127),
               0: (127, 255, 255)}
@@ -21,7 +21,9 @@ def draw_tier_list(rates: dict):
     text_color = (0, 0, 0)
     bold_font = ImageFont.truetype('Ubuntu-R.ttf', 170)
     sum = 0
+    image_sum = 0
     for key, value in rates.items():
+        image_sum += len(value)
         if len(value) > 20:
             sum += ceil(len(value) / 20)
         else:
@@ -33,9 +35,26 @@ def draw_tier_list(rates: dict):
     image_height = 1000 // 2
     width = image_width * 20 + tier_width
     height = sum * image_height
+    max_size = 174 * 10 ** 6
+    image_list = []
+    if max_size / width < height:
+        rates1, rates2 = {}, {}
+        max_rows = max_size / width // image_height
+        sum = 0
+        for key, value in rates.items():
+            if len(value) > 20:
+                sum += ceil(len(value) / 20)
+            else:
+                sum += 1
 
+            if sum < max_rows:
+                rates1[key] = value
+            else:
+                rates2[key] = value
+        image_list = draw_tier_list(rates1, offset + 1)
+        image_list2 = draw_tier_list(rates2, image_list[3] + 1)
+        return (image_list[0] + image_list2[0], image_list[1] + image_list2[1], image_list2[3])
     # Создание нового изображения тирлиста
-
     thumbnails = Image.new('RGB', (width, height), background_color)
     draw = ImageDraw.Draw(thumbnails)
 
@@ -96,21 +115,25 @@ def draw_tier_list(rates: dict):
                   fill=text_color)
 
     # Сохранение тирлиста в файл
-    file_path = 'tier_list.png'
+    offset = offset if offset != 0 else ''
+    file_path = f'tier_list{offset}.png'
     thumbnails.save(file_path)
 
     max_file_size_for_telegram = 49
     required = max_file_size_for_telegram * 2 ** 20
     file_size = os.path.getsize(file_path)
+    file_path_comp = f'tier_list_compressed{offset}.png'
     if file_size > required:
         ratio = required / file_size
         image = Image.open(file_path)
         new_width = int(image.width * ratio ** 0.6)
         new_height = int(image.height * ratio ** 0.6)
         resized_image = image.resize((new_width, new_height))
-        resized_image.save('tier_list_compressed.png')
+        resized_image.save(file_path_comp)
     else:
-        image = Image.open(file_path).save('tier_list_compressed.png')
+        image = Image.open(file_path).save(file_path_comp)
+    return (image_sum, [file_path_comp], offset)
+
 
 if __name__ == '__main__':
     print(draw_tier_list(d))

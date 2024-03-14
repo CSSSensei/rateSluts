@@ -11,6 +11,30 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS sluts_info
                   (id INTEGER PRIMARY KEY, note TEXT, votes TEXT, file_id TEXT, origin TEXT)''')
 cursor.execute('''CREATE TABLE IF NOT EXISTS average 
                   (id INTEGER PRIMARY KEY, sum INTEGER, amount INTEGER)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS results 
+                  (id INTEGER PRIMARY KEY, photo TEXT, rate FLOAT, user_id INTEGER)''')
+
+
+def add_not_incel_photo(num, photo, user_id):
+    cursor.execute("INSERT INTO results (id, photo, rate, user_id) VALUES (?, ?, ?, ?)", (num, photo, -1, user_id))
+    conn.commit()
+
+
+def get_not_incel_rate(num):
+    cursor.execute("SELECT rate FROM results WHERE id=?", (num,))
+    rate = cursor.fetchone()
+    return None if rate is None else rate[0]
+
+
+def add_rate_not_incel(num, rate):
+    cursor.execute("UPDATE results SET rate=? WHERE id=?", (rate, num))
+    conn.commit()
+
+
+def get_avgs_not_incel(user_id):
+    cursor.execute("SELECT rate FROM results WHERE user_id=?", (user_id,))
+    rate = cursor.fetchall()
+    return rate
 
 
 def add_rate_to_avg(user_id: int, rate: int):

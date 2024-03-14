@@ -4,10 +4,9 @@ import matplotlib.pyplot as plt
 from Color2 import color_calculate
 from matplotlib.animation import FuncAnimation
 
-
+conn = sqlite3.connect('slutsDB.db')
+cursor = conn.cursor()
 def get_statistics(username):
-    conn = sqlite3.connect('slutsDB.db')
-    cursor = conn.cursor()
 
     cursor.execute(f"SELECT * FROM sluts_info WHERE origin = '{username}'")
     rows = cursor.fetchall()
@@ -29,14 +28,12 @@ def get_statistics(username):
     # Создаем столбчатую диаграмму с разноцветными столбцами
     if len(averages) >= 100:
         plt.figure(figsize=(6 * len(averages) / 100, 5))
-
     plt.bar(range(len(averages)), averages, color=colors, width=1)
     plt.title(f'@{username}')
     plt.xlabel('Record Number')
     plt.ylabel('Average')
     plt.savefig(f'myplot_{username}.png')
     # Закрываем соединение с базой данных
-    conn.close()
     plt.clf()
 
     plt.plot(averages)
@@ -45,6 +42,44 @@ def get_statistics(username):
     plt.ylabel('Average')
     plt.savefig(f'myplot_{username}2.png')
     plt.clf()
+
+
+
+def get_statistics_not_incel(user_id):
+    cursor.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
+    rows = cursor.fetchall()
+
+    # Создаем списки для хранения данных
+    votes = []
+    averages = []
+
+    # Извлекаем данные из записей
+    for row in rows:
+        if row[2] < 0:
+            continue
+        averages.append(row[2])
+
+    averages = averages[-200:]
+    colors = [color_calculate(avg) for avg in averages]
+    # Создаем столбчатую диаграмму с разноцветными столбцами
+    if len(averages) >= 100:
+        plt.figure(figsize=(6 * len(averages) / 100, 5))
+
+    plt.bar(range(len(averages)), averages, color=colors, width=1)
+    plt.title(str(user_id))
+    plt.xlabel('Record Number')
+    plt.ylabel('Average')
+    plt.savefig(f'myplot_{user_id}.png')
+    # Закрываем соединение с базой данных
+    plt.clf()
+
+    plt.plot(averages)
+    plt.title(str(user_id))
+    plt.xlabel('Record Number')
+    plt.ylabel('Average')
+    plt.savefig(f'myplot_{user_id}2.png')
+    plt.clf()
+
 
 def new_func(username, averages):
     x = range(len(averages))

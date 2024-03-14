@@ -2,7 +2,8 @@ import datetime
 import sqlite3
 import json
 import time
-from typing import Dict
+from typing import Dict, Union
+from parser import *
 
 conn = sqlite3.connect('admins.db')
 cursor = conn.cursor()
@@ -12,8 +13,8 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS admins_info
                   hour TEXT, minute TEXT, groups_to_moderate TEXT, mode INTEGER, extra2 TEXT)''')
 
 cursor.execute('''CREATE TABLE IF NOT EXISTS group_parser 
-                  (id INTEGER PRIMARY KEY, group_name TEXT , active BOOL, top_likes BOOL,
-                  photo_amount INTEGER, time_delta TEXT, last_update INTEGER)''')
+                  (id INTEGER PRIMARY KEY, group_domain TEXT , active BOOL, top_likes BOOL,
+                  photo_amount INTEGER, time_delta TEXT, last_update INTEGER, name TEXT, cover TEXT)''')
 cursor.execute('''CREATE TABLE IF NOT EXISTS group_photos 
                   (id INTEGER PRIMARY KEY, group_name TEXT , caption TEXT, url TEXT)''')
 
@@ -60,6 +61,19 @@ def set_admin(user_id):
 
     else:
         cursor.execute("UPDATE admins_info SET active=? WHERE id=?", (True, user_id,))
+        conn.commit()
+
+
+def update_groupnames():
+    cursor.execute("SELECT id FROM group_parser")
+    rows = cursor.fetchall()
+    for row in rows:
+        id = row[0]
+        cursor.execute("SELECT group_domain FROM group_parser WHERE id=?", (id,))
+        domain = cursor.fetchone()[0]
+        name, photo = api_group_name(domain)
+        time.sleep(0.4)
+        cursor.execute("UPDATE group_parser SET name=?, cover=? WHERE group_domain=?", (name, photo, domain,))
         conn.commit()
 
 
@@ -182,8 +196,8 @@ def change_weekdays(user_id: int, day: int):
     conn.commit()
 
 
-def get_group_domain(group_id: int):
-    cursor.execute("SELECT group_name FROM group_parser WHERE id=?", (group_id,))
+def get_group_domain(group_id: Union[str, int]):
+    cursor.execute("SELECT group_domain FROM group_parser WHERE id=?", (group_id,))
     domain = cursor.fetchone()
     return domain[0] if domain is not None else None
 
@@ -191,6 +205,11 @@ def get_group_domain(group_id: int):
 def get_group_sets(group_id: int):
     cursor.execute("SELECT * FROM group_parser WHERE id=?", (group_id,))
     rows = cursor.fetchone()
+    if rows[7] is None:
+        name, photo = api_group_name(rows[1])
+        cursor.execute("UPDATE group_parser SET name=?, cover=? WHERE id=?", (name, photo, group_id,))
+        conn.commit()
+        return rows[:7] + (name, photo)
     return rows
 
 
@@ -198,6 +217,34 @@ def send_photos_by_id(num: int):
     cursor.execute("SELECT * FROM group_photos WHERE id=?", (num,))
     rows = cursor.fetchone()
     return rows
+
+
+def get_group_name(domain: Union[str, int]):
+    if isinstance(domain, str):
+        cursor.execute("SELECT name FROM group_parser WHERE group_domain=?", (domain,))
+        rows = cursor.fetchone()
+        if rows is None:
+            return None
+        else:
+            if rows[0] is None:
+                name, photo = api_group_name(domain)
+                cursor.execute("UPDATE group_parser SET name=?, cover=? WHERE group_domain=?", (name, photo, domain,))
+                conn.commit()
+                return name.replace('<','').replace('>','')
+            return rows[0].replace('<','').replace('>','')
+    else:
+        cursor.execute("SELECT name FROM group_parser WHERE id=?", (domain,))
+        rows = cursor.fetchone()
+        if rows is None:
+            return None
+        else:
+            if rows[0] is None:
+                name, photo = api_group_name(domain)
+                cursor.execute("UPDATE group_parser SET name=?, cover=? WHERE group_domain=?", (name, photo, domain,))
+                conn.commit()
+                return name.replace('<','').replace('>','')
+            return rows[0].replace('<','').replace('>','')
+
 
 
 def get_active_groups():
@@ -263,8 +310,9 @@ def add_group(user_id: int, domain: str):
         groups = ', '.join(map(str, groups))
     cursor.execute("UPDATE admins_info SET groups_to_moderate=? WHERE id=?", (groups, user_id,))
     conn.commit()
-    cursor.execute("INSERT INTO group_parser (id, group_name, active, top_likes, photo_amount, time_delta, last_update) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (num, domain, True, True, 3, 5, 0))
+    name, photo = api_group_name(domain)
+    cursor.execute("INSERT INTO group_parser (id, group_domain, active, top_likes, photo_amount, time_delta, last_update, name, cover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (num, domain, True, True, 6, 0, 0, name, photo))
     conn.commit()
     return num, num
 

@@ -21,6 +21,7 @@ def get_posts(parameters: dict) -> dict:
                                         'offset': offset * 100,
                                         'count': 100}
                                 )
+        time.sleep(0.25)
         offset += 1
         data = response.json()
         now = datetime.datetime.now()
@@ -91,6 +92,18 @@ def get_posts(parameters: dict) -> dict:
                 result[post[3]].append(url)
         result[post[3]] = (result[post[3]], post[2], post[1])
     return result
+
+
+def api_group_name(domain):
+    response = requests.get('https://api.vk.com/method/groups.getById',
+                            params={'access_token': vk_token,
+                                    'v': version,
+                                    'group_id': domain}
+                            )
+    data = response.json()
+    name = data['response'][0]['name']
+    photo = data['response'][0]['photo_200']
+    return name.replace('<','').replace('>',''), photo
 
 
 def check_valid_url(url: str):
