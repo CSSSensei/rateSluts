@@ -19,7 +19,7 @@ def draw_tier_list(rates: dict, offset: int = 0):
     tiers = {5: 'S', 4: 'A', 3: 'B', 2: 'C', 1: 'D', 0: 'E'}
     background_color = (26, 26, 23)
     text_color = (0, 0, 0)
-    bold_font = ImageFont.truetype('Ubuntu-R.ttf', 170)
+    bold_font = ImageFont.truetype('Ubuntu-R.ttf', 90)
     sum = 0
     image_sum = 0
     for key, value in rates.items():
@@ -29,10 +29,10 @@ def draw_tier_list(rates: dict, offset: int = 0):
         else:
             sum += 1
     # Размеры тирлиста и размер каждой картинки
-    tier_width = 1000 // 2
-    tier_height = 1000 // 2
-    image_width = 750 // 2
-    image_height = 1000 // 2
+    tier_width = 1000 // 3
+    tier_height = 1000 // 3
+    image_width = 750 // 3
+    image_height = 1000 // 3
     width = image_width * 20 + tier_width
     height = sum * image_height
     max_size = 174 * 10 ** 6

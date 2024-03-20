@@ -3,6 +3,7 @@ import json
 import matplotlib.pyplot as plt
 from Color2 import color_calculate
 from matplotlib.animation import FuncAnimation
+from sql_db import get_username_by_id
 
 conn = sqlite3.connect('slutsDB.db')
 cursor = conn.cursor()
@@ -46,6 +47,7 @@ def get_statistics(username):
 
 
 def get_statistics_not_incel(user_id):
+    username = get_username_by_id(user_id)
     cursor.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
     rows = cursor.fetchall()
 
@@ -66,7 +68,7 @@ def get_statistics_not_incel(user_id):
         plt.figure(figsize=(6 * len(averages) / 100, 5))
 
     plt.bar(range(len(averages)), averages, color=colors, width=1)
-    plt.title(str(user_id))
+    plt.title(username)
     plt.xlabel('Record Number')
     plt.ylabel('Average')
     plt.savefig(f'myplot_{user_id}.png')
@@ -74,7 +76,7 @@ def get_statistics_not_incel(user_id):
     plt.clf()
 
     plt.plot(averages)
-    plt.title(str(user_id))
+    plt.title(username)
     plt.xlabel('Record Number')
     plt.ylabel('Average')
     plt.savefig(f'myplot_{user_id}2.png')

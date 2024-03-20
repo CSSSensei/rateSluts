@@ -46,7 +46,7 @@ def check_new_user(id):
         cursor.execute("INSERT INTO users_info (id, new_user) VALUES (?, ?)", (id, False))
         conn.commit()
         return True
-    if user_is_new[0]:
+    if user_is_new[0] or user_is_new[0] is None:
         cursor.execute("UPDATE users_info SET new_user=? WHERE id=?", (False, id))
         conn.commit()
         return True
@@ -175,10 +175,14 @@ def get_username_by_id(id):
 
 
 def get_ban(id):
-    cursor.execute("UPDATE users_info SET banned=?, verified=? WHERE id=?", (True, False, id,))
-    if cursor.rowcount == 0:
-        return 0
-    return 1
+    cursor.execute("SELECT username FROM users_info WHERE id=?", (id,))
+    user_id = cursor.fetchone()
+    if user_id is not None:
+        cursor.execute("UPDATE users_info SET banned=?, verified=? WHERE id=?", (True, False, id,))
+        conn.commit()
+        return 1
+    return 0
+
 
 
 def get_current_state(id):

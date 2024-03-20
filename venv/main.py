@@ -17,9 +17,11 @@
 import asyncio
 import calendar
 import datetime
+import io
 import json
 import os
 import time
+import shutil
 
 import aiogram.utils.chat_action
 import yadisk
@@ -63,6 +65,7 @@ load_dotenv(find_dotenv())
 
 API_TOKEN: str = os.getenv('TOKEN')
 channel_id = os.getenv('CHANNEL_ID')
+channel_id_public = os.getenv('CHANNEL_ID_public')
 ya_token = os.getenv('YAtoken')
 storage: MemoryStorage = MemoryStorage()
 
@@ -75,8 +78,12 @@ legendary_quote = 'Назвался груздем — пошёл на хуй\n�
 hz_answers = ['Я тебя не понимаю...', 'Я не понимаю, о чем ты', 'Что ты имеешь в виду? 🧐', 'Я в замешательстве 🤨',
               'Не улавливаю смысла 🙃', 'Что ты пытаешься сказать❓', 'Не понимаю твоего сообщения 😕',
               '🤷‍♂️ Не понимаю 🤷‍♀️']
+emoji_lol = '🍏🍎🍐🍊🍋🍌🍉🍇🍓🫐🍈🍒🍑🥭🍍🥥🥝🍅🍆🥑🫛🥦🥬🥒🌶🫑🌽🥕🫒🧄🧅🥔🍠🫚🥐🥯🍞🥖🥨🧀🥚🍳🧈🥞🧇🌭🍔🍟🍕🥪🥙🧆🌮🌯🫔🥗🥘🫕🥫🍝🍜🍲🍛🍣🍱🥟🦪🍤🍙🍚🍘🍥🥠🥮🍡🍧🍨🍦🥧🧁🍰🎂🍮🍭🍬🍫🍿🍩🍪🌰🍯🥛🫗🍼🫖☕️🍵🧃🥤🧋🍶🍾🧊⚽️🏀🏈⚾️🥎🎾🏐🏉🥏🎱🪀🏓🏸🎧🎫🎟🎲♟🎯🎳🎮🎰🧩🗾🎑🏞🌅🌄🌠🎇🎆🌇🌆🏙🌃🌌🌉🌁💣🧨💊🎁🎈🛍🪩📖📚📙📘📗📕📒📔📓📰🗞🧵👚👕👖👔💼👜🎩🧢👒🎓🧳👓🕶🥽🌂💍🐶🐭🐹🐰🦊🐻🐼🐻‍❄️🐨🐯🦁🐸🐵🙈🙉🙊🐒🐱🐔🐧🐦🐤🐣🐥🪿🦆🐦‍⬛️🦅🦉🦇🐺🐴🦄🐝🦋🦖🦕🐙🦑🪼🦐🐬🐋🐳🦈🦭🪽🕊🪶🐉🐲🦔🐁🌵🎄🌲🌳🌴🪵🌱🌿☘️🍀🎍🪴🎋🍃🍂🍁🪺🐚🪸🪨🌾💐🌷🌹🥀🪻🪷🌺🌸🌼🌻🌎🌍🌏🪐💫⭐️✨💥🔥🌪🌈☀️🌤⛅️🌥☁️☃️⛄️💨☂️🌊🌫'
+emoji_banned = '⛔❗🤯😳❌⭕🛑📛🚫💢🚷📵🔴🟥💣🗿🐓🙊🙉🙈🐷🫵🥲🙁😕😟😔😞😧😦😯🙄😵💀🚨😐'
 dice_points = {'🎲': 6, '🎯': 6, '🎳': 6, '🏀': 4, '⚽': 3, '🎰': 64}
-
+replicas = {}
+with open('replicas.txt', 'r', encoding='utf-8') as file:
+    replicas = json.load(file)
 emoji = {
     0: '🤢',
     1: '🤮',
@@ -168,6 +175,11 @@ class AdminCallBack(CallbackData, prefix="admin"):
     user_id: int = 0
 
 
+class ConfirmCallBack(CallbackData, prefix="confirm"):
+    action: int
+    photo_id: int = 0
+
+
 class ManageSettings(CallbackData, prefix="manage"):
     action: int
     photo_id: Union[int, str] = 0
@@ -225,12 +237,20 @@ class send_DM(BaseFilter):
         return message.text[1:6] == 'send_'
 
 
+@dp.message(StateFilter(FSMFillForm.banned))
+async def urbanned(message: Message, state: FSMContext):
+    await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+                         reply_markup=ReplyKeyboardRemove())
+
+
 def get_keyboard(user_id: int):
     if user_id in get_admins():
         return admin_keyboard
     elif user_id in get_users():
         return basic_keyboard
-    return not_incel_keyboard
+    if len(get_avgs_not_incel(user_id)) > 5:
+        return not_incel_keyboard
+    return None
 
 
 @dp.message(F.text, ban_username())
@@ -291,11 +311,21 @@ async def send_quote_dada(message: Message, state: FSMContext):
     await state.set_state(FSMFillForm.sendQuote)
 
 
+@dp.message(Command(commands='test'), F.from_user.id.in_(incels))
+async def test_something(message: Message):
+    await message.answer(text='Эта команда для тестирования новых функций')
+
+
 @dp.message(Command(commands='send_tier_list'), F.from_user.id.in_(incels))
 async def send_tier_and_delete(message: Message, state: FSMContext):
     incels = get_users()
     await message.answer(text='Тир лист начал генерироваться')
     await weekly_tierlist(message.from_user.id)
+
+
+@dp.message(Command(commands='stat'))
+async def send_tier_and_delete(message: Message, state: FSMContext):
+    await stat_photo(message, state)
 
 
 @dp.message(Command(commands='delete_tier_list'))
@@ -308,6 +338,29 @@ async def send_tier_and_delete(message: Message, state: FSMContext):
         await message.answer(
             text='<b>ВСЯ БД БУДЕТ СТЕРТА! Ты уверен???</b>\n<span class="tg-spoiler">Админ может дать пизды</span>',
             reply_markup=InlineKeyboardMarkup(inline_keyboard=array))
+
+
+@dp.message(Command(commands='upd_file'))
+async def send_tier_and_delete(message: Message, state: FSMContext):
+    global replicas
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй')
+    else:
+        if message.document and message.document.mime_type == 'text/plain':
+            f = await bot.get_file(message.document.file_id)
+            f_path = f.file_path
+            await bot.download_file(file_path=f_path, destination='replicas2.txt')
+            try:
+                with open('replicas2.txt', 'r', encoding='utf-8') as file:
+                    replicas = json.load(file)
+                shutil.copyfile('replicas2.txt', 'replicas.txt')
+                os.remove('replicas2.txt')
+                await message.answer('Новый файл сохранен')
+            except Exception as e:
+                await bot.send_message(chat_id=972753303,
+                                       text=f'Произошла ошибка при открытии файла "replicas.txt"\n{e}')
+        else:
+            await message.answer('❗️Ты забыл прикрепить файл или прикрепил файл не того типа')
 
 
 @dp.callback_query(F.data.in_(['ya_gay_delete_tier_db',
@@ -367,7 +420,9 @@ async def del_username(message: Message):
 def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_to_delete=0, back_ids=0):
     array_buttons: list[list[InlineKeyboardButton]] = [[], []]
     if back:
-        array_buttons = [[InlineKeyboardButton(text='🔙', callback_data=ManageSettings(action=8, photo_id=ids, message_to_delete=message_to_delete, back_ids=back_ids).pack())]]
+        array_buttons = [[InlineKeyboardButton(text='🔙',
+                                               callback_data=ManageSettings(action=8, photo_id=ids, message_to_delete=message_to_delete,
+                                                                            back_ids=back_ids).pack())]]
         return InlineKeyboardMarkup(inline_keyboard=array_buttons)
     for i in range(12):
         array_buttons[i // 6].append(InlineKeyboardButton(
@@ -377,7 +432,8 @@ def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_
     if mailing == 3:
         add_note(num, '')
         array_buttons.append([
-            InlineKeyboardButton(text='🔙', callback_data=ManageSettings(action=8, photo_id=ids, message_to_delete=message_to_delete,back_ids=back_ids).pack())])
+            InlineKeyboardButton(text='🔙', callback_data=ManageSettings(action=8, photo_id=ids, message_to_delete=message_to_delete,
+                                                                        back_ids=back_ids).pack())])
     markup = InlineKeyboardMarkup(inline_keyboard=array_buttons)
     return markup
 
@@ -386,14 +442,17 @@ async def send_results(num: int, rate: str):
     origin = get_origin(num)
     origin_id = check_user(origin)
     if origin_id not in get_users():
+        add_not_incel_photo(num, get_photo_id_by_id(num), origin_id, float(rate))
         if origin_id is not None:
-            if float(rate) <= 4:
+            if float(rate) <= 5:
                 emoji_loc = '📉'
             else:
                 emoji_loc = '📈'
-            caption = f'Привет, {origin}. Твое фото оценено на <b>{rate} из 10</b> {emoji_loc}\n<span class="tg-spoiler">(Внимание! Нейросеть только обучается)</span>'
+            caption = f'{emoji_loc} Твое фото оценено на <b>{rate}</b> из <b>10</b>\n\n❤️ <i>Это не моё мнение и не мнение команды RatePhotosBot. Не судите строго за ошибки — я только учусь.</i>'
             try:
-                await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption, reply_markup=not_incel_keyboard)
+                await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption, reply_markup=get_keyboard(origin_id))
+                if len(get_avgs_not_incel(origin_id)) == 6:
+                    await bot.send_message('🙀 Теперь тебе доступна статистика!\nНажимай скорее <i>/stat</i>', reply_markup=not_incel_keyboard)
             except Exception as e:
                 await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
 
@@ -403,8 +462,7 @@ async def send_group_photo(user_id: int, num: str):
         async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
             photo = send_photos_by_id(int(num))
             caption = f'👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>'
-            msg = await bot.send_photo(chat_id=user_id, photo=photo[3],
-                                       caption=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
+            msg = await bot.send_photo(chat_id=user_id, photo=photo[3], caption=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
                                        reply_markup=get_manage_photo(ids=int(num)))
             set_message_to_delete(user_id, f'{msg.message_id}')
 
@@ -420,10 +478,8 @@ async def send_group_photo(user_id: int, num: str):
     try:
         async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
             msg: List[Message] = await bot.send_media_group(user_id, media=media)
-            await bot.send_message(chat_id=user_id,
-                                   text=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
-                                   reply_markup=get_manage_photo(ids=nums,
-                                                                 message_to_delete=f'{msg[0].message_id}, {msg[-1].message_id}'),
+            await bot.send_message(chat_id=user_id, text=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
+                                   reply_markup=get_manage_photo(ids=nums, message_to_delete=f'{msg[0].message_id}, {msg[-1].message_id}'),
                                    disable_web_page_preview=True)
             set_message_to_delete(user_id, f'{msg[0].message_id}-{msg[-1].message_id}')
     except Exception as e:
@@ -577,6 +633,12 @@ def moderate_keyboard(file_id: int, creator: str):
               InlineKeyboardButton(text='🔕', callback_data=ModerateCallBack(action=4, photo_id=file_id, creator=creator).pack())]]
     return InlineKeyboardMarkup(
         inline_keyboard=array)
+
+
+def confirm_keyboard(file_id: int):
+    array = [[InlineKeyboardButton(text='✅', callback_data=ConfirmCallBack(action=1, photo_id=file_id).pack()),
+              InlineKeyboardButton(text='❌', callback_data=ConfirmCallBack(action=0, photo_id=file_id).pack())]]
+    return InlineKeyboardMarkup(inline_keyboard=array)
 
 
 def get_admin_keyboard(user_id: int, cancel_url_sending: bool = False, superuser: bool = False):
@@ -1178,6 +1240,9 @@ async def filter_rates(callback: CallbackQuery,
                 avg = sum(votes.values()) / len(votes.keys())
                 add_to_weekly(get_photo_id_by_id(num), avg)
                 avg_str = '{:.2f}'.format(avg)
+                avg_public = min(avg + 2, 10)
+                avg_str_public = '{:.2f}'.format(avg_public)
+                await send_results(num, avg_str_public)
                 extra = ''
                 spoiler = False
                 if avg == 0:
@@ -1195,13 +1260,18 @@ async def filter_rates(callback: CallbackQuery,
                         add_rate_to_avg(user_id, value)
                     user_rates += f'@{key}: <i>{value}</i>\n'
                 rounded = round(avg)
-                note_str = get_note_sql(num)
-                note_str = f': <blockquote>{note_str}</blockquote>\n' if note_str is not None else '\n\n'
+                rounded_public = round(avg_public)
+                note_str_origin = get_note_sql(num)
+                note_str = f': <blockquote>{note_str_origin.replace("/anon", "").strip()}</blockquote>\n' if note_str_origin is not None else '\n\n'
                 name = get_origin(num)
                 name = '@' + name if name[0] != '👥' else f'👥 <a href="vk.com/{name[2:]}">{get_group_name(name[:name.find("?")][2:])}</a>'
                 txt = extra + f'Автор пикчи <b>{name}</b>' + note_str + "Оценки инцелов:\n" + user_rates + '\n' f'Общая оценка: <b>{avg_str}</b>' + f'\n<i>#{rate2[rounded].replace(" ", "_")}</i>'
                 await bot.send_photo(chat_id=channel_id, photo=get_photo_id_by_id(num), caption=txt,
                                      has_spoiler=spoiler)
+                if note_str_origin is None or '/anon' not in note_str_origin:
+
+                    txt2 = note_str[2:] + f'Оценено на <b>{avg_public}</b> из <b>10</b>' + f'\n<i>#{rate2[rounded_public].replace(" ", "_")}</i>'
+                    await bot.send_photo(chat_id=channel_id_public, photo=get_photo_id_by_id(num), caption=txt2)
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка после оценки фото № {num} пользователем {callback.from_user.username} \n{e}')
         try:
@@ -1249,6 +1319,23 @@ async def filter_rates(callback: CallbackQuery,
     await send_photo_to_users(callback.from_user.id, num)
 
 
+@dp.callback_query(ConfirmCallBack.filter())
+async def confirm_photo_filter(callback: CallbackQuery,
+                               callback_data: ConfirmCallBack, state: FSMContext):
+    action = callback_data.action
+    photo_id = callback_data.photo_id
+    await callback.answer(text=['❌', '✅'][action % 2])
+    if action == 0:
+        await callback.message.edit_text('⛔️ Поймали в последний момент.\nОтправка фото отменена')
+    elif action == 1:
+        note = get_note_sql(photo_id)
+        note = '' if note is None else f'"{note}"'
+        await bot.send_photo(972753303, photo=get_photo_id_by_id(photo_id),
+                             caption=f'Фото от пользователя <i>@{callback.from_user.username}</i>\n<i>{note}</i>',
+                             reply_markup=moderate_keyboard(photo_id, callback.from_user.username))
+        await callback.message.edit_text("😎 Твоё фото добавлено в очередь")
+
+
 @dp.callback_query(ModerateCallBack.filter())
 async def moderate_photo(callback: CallbackQuery,
                          callback_data: ModerateCallBack, state: FSMContext):
@@ -1266,8 +1353,8 @@ async def moderate_photo(callback: CallbackQuery,
             try:
                 add_rate_not_incel(photo_id, -2)
                 await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),
-                                     caption='Ваше фото ❌ <b>не может быть оценено</b> ❌\n\nВозможно, на фото нет 👨🏿‍🦰 человека 👨‍🦰, либо содержимое 🔩 неприемлемо 🔩. Попробуйте отправить <i>другое</i> фото или <b>добавить подпись</b> 🖋️.',
-                                     reply_markup=not_incel_keyboard)
+                                     caption=replicas['reject'],
+                                     reply_markup=get_keyboard(creator_id))
             except Exception as e:
                 await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 8\n{str(e)}')
         await callback.message.answer(text=f'<b>Забанить долбоеба?</b>\n<i>@{creator}</i>',
@@ -1294,6 +1381,7 @@ async def moderate_photo(callback: CallbackQuery,
         else:
             await callback.message.edit_text(text=f'Пользователь <i>@{creator}</i> был успешно забанен!',
                                              reply_markup=None)
+            await bot.send_message(chat_id=creator_id, text='🔫 C этого момента ты в бане')
     elif action == 4:
         rate_loc = get_not_incel_rate(photo_id)
         if rate_loc == -1:
@@ -1317,14 +1405,13 @@ async def process_start_command(message: Message, state: FSMContext):
         await state.set_state(FSMFillForm.verified)
     else:
         if result[1] <= 0   :
-            await message.answer('Ты заблокирован', reply_markup=ReplyKeyboardRemove())
+            await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+                                 reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
 
-        await message.answer('Привет! 👋\nЯ 🤖 бот канала «Оценка фото»\nПросто пришли мне 📷 фото, и нейросеть даст ему оценку.\nОна будет доступна тут, в личке, и в канале. Если не хочешь публичности, то подпиши фото /anon 🥷\n\n🆘 Подробнее про функции /help \nℹ️ Узнать больше о нейросети /info')
-        if result[1] == 10:
-            async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_video'):
-                await message.answer_video(video=FSInputFile(path='guide.mp4'))
+        await message.answer(replicas['hi'].replace('$', '"'), disable_web_page_preview=True, reply_markup=get_keyboard(user_id))
+
         #await message.answer_sticker(sticker='CAACAgIAAxkBAAELD9NljoEHEI6ehudWG_Cql5PXBwMw-AACSCYAAu2TuUvJCvMfrF9irTQE', reply_markup=not_incel_keyboard)
 
 
@@ -1342,6 +1429,11 @@ async def settings(message: Message, state: FSMContext):
     await state.set_state(FSMFillForm.verified)
 
 
+@dp.message(Command(commands='anon'), ~F.photo)
+async def anon(message: Message, state: FSMContext):
+    await message.answer(text='А фоточка? 🥺', reply_markup=get_keyboard(message.from_user.id))
+
+
 @dp.message(Command(commands='clear_admin_queues'))
 async def settings(message: Message, state: FSMContext):
     try:
@@ -1356,7 +1448,7 @@ async def settings(message: Message, state: FSMContext):
 async def help(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer('Скинь 😊 мне 🤗 любое 📸 фото <span class="tg-spoiler">(человека)</span>, и 🤖 нейросеть 🧠 оценит 📈 его 💯 по 👇 всей 😮 своей 🤪 ебанутой 🙃 строгости. На 🕒 это 🤔 может 🤞 понадобиться ⏳ время. Если 😌 Вы 🙏<b> добавите 📝 подпись </b>✍️ к 🖼️ картинке, <i>оценка 📊 будет ⭐️ точнее</i>', reply_markup=not_incel_keyboard)
+        await message.answer(replicas['help'].replace('$', '"'), disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
         async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_video'):
             await message.answer_video(video=FSInputFile(path='guide.mp4'))
         return
@@ -1366,6 +1458,18 @@ async def help(message: Message, state: FSMContext):
         disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
     async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_video'):
         await message.answer_video(video=FSInputFile(path='guide.mp4'))
+
+
+@dp.message(Command(commands='info'))
+async def info(message: Message, state: FSMContext):
+    result = check_id(message.from_user.id, message.from_user.username)
+    await message.answer(replicas['info'].replace('$', ''), disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
+
+
+@dp.message(Command(commands='about'))
+async def about(message: Message, state: FSMContext):
+    result = check_id(message.from_user.id, message.from_user.username)
+    await message.answer(replicas['about'].replace('$', ''), disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
 
 
 @dp.message(Command(commands='quote'))
@@ -1476,7 +1580,7 @@ async def send_clear_users_db(message: Message):
         -int(x[5].split(',')[-1]) if x[5] is not None else float('inf'), x[1] if x[1] is not None else ''))
     for user in db_incel:
         username = f'@{user[1]}' if user[1] is not None else 'N/A'
-        queue_str = f'<i>Очередь:</i> {user[-1]}' if (user[3] and user[-1] is not None) else '<i>Очередь пуста ✅</i>'
+        queue_str = f'<i>Очередь:</i> {user[-2]}' if (user[3] and user[-2] is not None) else '<i>Очередь пуста ✅</i>'
         line = f'<b>{username}</b> | {queue_str}\n'
         if len(line) + len(txt) < 4096:
             txt += line
@@ -1624,17 +1728,17 @@ async def get_queue_rates(message: Message):
     db_incel = [i for i in db if i[3]]
     txt = ''
     mx_len_username = 0
-    for incel in db_incel:
-        if len(incel[1]) > mx_len_username:
-            mx_len_username = len(incel[1])
+    for incel_loc in db_incel:
+        if len(incel_loc[1]) > mx_len_username:
+            mx_len_username = len(incel_loc[1])
     cnt = 0
-    for incel in db_incel:
-        if incel[-1] is None:
+    for incel_loc in db_incel:
+        if incel_loc[-2] is None:
             queue = '✅'
         else:
-            queue = f"В очереди <b>{len(incel[-1].split(','))}</b>"
+            queue = f"В очереди <b>{len(incel_loc[-2].split(','))}</b>"
             cnt += 1
-        line = f'<code>@{incel[1].ljust(mx_len_username)}</code> | {queue}\n'
+        line = f'<code>@{incel_loc[1].ljust(mx_len_username)}</code> | {queue}\n'
         txt += line
     txt += f'<blockquote>Итого ублюдков: <b>{cnt}</b></blockquote>'
     await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
@@ -1667,7 +1771,7 @@ async def send_statham_db(message: Message):
 
 @dp.message(Command(commands='getcoms'), F.from_user.id.in_(get_users()))
 async def get_all_commands(message: Message):
-    txt = '/start\n/help\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/getcoms'
+    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/getcoms\n/about'
     await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
 
 
@@ -1769,7 +1873,7 @@ async def insert_new_quote(message: Message, state: FSMContext):
 async def get_verified(message: Message, state: FSMContext):
     set_verified(id=message.from_user.id)
     await message.answer(
-        text='Легенда! Теперь ты в нашей банде. Просто пришли мне фото, и его смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к фото и отправь мне, она будет показана в <a href="https://t.me/+D_c0v8cHybY2ODQy">канале</a> по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки.',
+        text='<b>Привет, уёбище!</b>\nТеперь ты в нашей банде. Просто пришли мне фото, и его смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к фото и отправь мне, она будет показана в <b><a href="https://t.me/+D_c0v8cHybY2ODQy">канале</a></b> по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки. Не забудь добавить <b>/anon</b>, если не хочешь, чтобы фото попало в <b><a href="https://t.me/rateimage">публичный канал</a></b>',
         disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
     await state.set_state(FSMFillForm.verified)
 
@@ -1821,9 +1925,7 @@ async def send_photo_to_users(origin_user, num: int):
 #     add_current_state(message.from_user.id, 0, message.from_user.username)
 
 
-@dp.message(StateFilter(FSMFillForm.banned))
-async def urbanned(message: Message, state: FSMContext):
-    await message.answer(text='Ты заблокирован, долбоёб')
+
 
 
 @dp.message(F.text == 'Разослать фото')
@@ -1831,7 +1933,8 @@ async def send_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
         if result[1] == -1:
-            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+                                 reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
         await message.answer('Ну так пришли его', reply_markup=ReplyKeyboardRemove())
@@ -1855,35 +1958,23 @@ async def default_photo(message: Message, state: FSMContext):
     add_girlphoto(message.from_user.id, last_num + 1)
     if not result[0]:
         if result[1] == -1:
-            await message.answer('Ты заблокирован! 💀', reply_markup=ReplyKeyboardRemove())
+            await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+                                 reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
         caption = '' if message.caption is None else message.caption
         if caption != '':
             add_note(last_num + 1, message.caption)
-            caption = f'\n"{caption}"'
-        await bot.send_photo(972753303, photo=file_id,
-                             caption=f'Фото от пользователя <i>@{message.from_user.username}</i><i>{caption}</i>',
-                             reply_markup=moderate_keyboard(last_num + 1, message.from_user.username))
+
         try:
-            add_not_incel_photo(last_num + 1, file_id, message.from_user.id)
-            msg = await message.answer("Твое фото уже оценивается нейросетью 🧠, это может занять некоторое время ⌛️\nЗагрузка...")
-            s = '🕛🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚'
-            cnt = 90
-            while cnt > 0:
-                async with ChatActionSender(bot=bot, chat_id=message.from_user.id):
-                    await msg.edit_text(f"Твое фото уже оценивается нейросетью 🧠, это может занять некоторое время ⌛️\nЗагрузка...{s[-cnt % len(s)]}")
-                await asyncio.sleep(1)
-                if cnt % 5 == 0:
-                    if get_not_incel_rate(last_num + 1) is not None and get_not_incel_rate(last_num + 1) != -1:
-                        break
-                cnt -= 1
-            await bot.delete_message(chat_id=message.chat.id, message_id=msg.message_id)
-            rate_local = get_not_incel_rate(last_num + 1)
-            if rate_local == -1:
-                rate_local = round(random.uniform(4, 7), 2)
-                add_rate_not_incel(last_num + 1, rate_local)
-                await send_results(last_num + 1, rate_local)
+            if check_new_user(message.from_user.id):
+                await message.answer(replicas['warning'])
+            note = '' if (message.caption is None or message.caption.replace('/anon', '').strip() == '') else f'\nПодпись: <i>"{message.caption.replace("/anon", "")}"</i>'
+            if message.caption is None or '/anon' not in message.caption:
+                text = '🙋🏼‍♀️ Выкладываем в канал'
+            else:
+                text = '🙅🏼‍♀️ Не выкладываем в канал'
+            await message.answer(text=f'{random.choice(emoji_lol)} Давай проверим!{note}\n<b>{text}</b>\n\nПравильно?', reply_markup=confirm_keyboard(last_num + 1))
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 12\n{str(e)}')
         return
@@ -1891,7 +1982,7 @@ async def default_photo(message: Message, state: FSMContext):
 
     if message.caption is not None:
         await message.answer(
-            text=f'Ты прислал фото с заметкой: <i>{message.caption}</i>. Оцени фото, которое ты скинул',
+            text=f'Ты прислал фото с заметкой: <i>{message.caption.replace("/anon", "").strip()}</i>. Оцени фото, которое ты скинул',
             reply_markup=get_rates_keyboard(last_num + 1, 0))
         add_note(last_num + 1, message.caption)
     else:
@@ -1907,11 +1998,12 @@ async def stat_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
         if result[1] == -1:
-            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+                                 reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
         not_incel_rates = get_avgs_not_incel(message.from_user.id)
-        if len(not_incel_rates):
+        if len(not_incel_rates) > 5:
             async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
                 user_id = message.from_user.id
                 get_statistics_not_incel(user_id)
@@ -1922,7 +2014,7 @@ async def stat_photo(message: Message, state: FSMContext):
                 os.remove(f'myplot_{user_id}.png')
                 os.remove(f'myplot_{user_id}2.png')
         else:
-            await message.answer(text='Вы еще не присылали никаких фото', reply_markup=not_incel_keyboard)
+            await message.answer(text=f'📶 Пришли <b>более 5 фото</b>, чтобы получить статистику\nТебе осталось прислать {6 - len(not_incel_rates)}', reply_markup=get_keyboard(message.from_user.id))
         return
     if len_photos_by_username(message.from_user.username) > 0:
         async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
@@ -1949,13 +2041,14 @@ async def stat_photo(message: Message, state: FSMContext):
 
 
 @dp.message(F.text == 'Изменить последнюю оценку ✏️', ~StateFilter(FSMFillForm.rating))
-async def stat_photo(message: Message, state: FSMContext):
+async def change_last_rate(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
         if result[1] == -1:
-            await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+            await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+                                 reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
-        await message.answer('Бля, иди нахуй реально!', reply_markup=not_incel_keyboard)
+        await message.answer('Бля, иди нахуй реально!', reply_markup=get_keyboard(message.from_user.id))
         return
     last_rate = get_last_rate(message.from_user.id)
     if last_rate == 0 or last_rate == 5:
@@ -1976,7 +2069,7 @@ async def settings_button(message: Message):
                          reply_markup=get_admin_keyboard(user_id))
 
 @dp.message(StateFilter(FSMFillForm.sendDM))
-async def stat_photo(message: Message, state: FSMContext):
+async def send_dm_func(message: Message, state: FSMContext):
     if current_dm_id.get(message.from_user.id, 0) == 0:
         await message.answer(text='Произошла ошибка', reply_markup=get_keyboard(message.from_user.id))
         await state.clear()
@@ -2043,7 +2136,12 @@ async def u_r_wellcome(message: Message):
                                    reaction=[ReactionTypeEmoji(emoji='❤️')], is_big=True)
     await bot.send_sticker(chat_id=message.chat.id,
                            sticker='CAACAgEAAxkBAAEKShplAfTsN4pzL4pB_yuGKGksXz2oywACZQEAAnY3dj9hlcwZRAnaOjAE', reply_to_message_id=message.message_id)
-
+    # for i in range(len(replicas['banned'])):
+    #     await message.answer(random.choice(emoji_banned) + ' ' + replicas['banned'][i].replace('$', '"'),
+    # #                          reply_markup=ReplyKeyboardRemove())
+    # await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+    #                      reply_markup=ReplyKeyboardRemove())
+    
 
 @dp.message(
     lambda message: message.text is not None and (
@@ -2067,30 +2165,20 @@ async def incel_get_quote(message: Message):
     await quote(message)
 
 
-@dp.message(F.sticker)
-async def sticker_response(message: Message):
-    print(message)
-
-
 @dp.message(F.dice)
 async def dice_message(message: Message):
     emoji = message.dice.emoji
     score = message.dice.value
     await asyncio.sleep(3)
     if score >= dice_points[emoji]:
-        await message.answer(text='АХУЕЕЕЕТЬ\nКРАСАВА\nЛУЧШИЙ')
+        await message.answer(text=random.choice(replicas['grats']))
         if emoji == '🎰':
             await bot.set_message_reaction(chat_id=message.chat.id, message_id=message.message_id,
                                            reaction=[ReactionTypeEmoji(emoji='🤯')], is_big=True)
             await bot.send_sticker(chat_id=message.chat.id,
                                    sticker='CAACAgIAAxkBAAELO0dlrmyiCn3T4rSpqM3zyjNv2ksI5AACowADDPlNDMG5-fZfTkbJNAQ')
     else:
-        await message.answer(text='лох')
-
-
-@dp.message(F.from_user.id.in_(get_users()))
-async def any_message_from_incel(message: Message, state: FSMContext):
-    await message.answer(text=random.choice(hz_answers), reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text=random.choice(replicas['regret']))
 
 
 @dp.message()
@@ -2101,12 +2189,64 @@ async def any_message(message: Message, state: FSMContext):
             await bot.send_message(chat_id=972753303, text=f'<i>@{message.from_user.username}:</i>\n"{message.text}"', disable_notification=True)
         else:
             caption = '' if message.caption is None else f':\n"{message.caption}"'
-            await bot.copy_message(from_chat_id=message.chat.id,chat_id=972753303, message_id=message.message_id, disable_notification=True, caption=f'<i>@{message.from_user.username}</i>{caption}')
+            await bot.copy_message(from_chat_id=message.chat.id, chat_id=972753303, message_id=message.message_id, disable_notification=True,
+                                   caption=f'<i>@{message.from_user.username}</i>{caption}')
     if not result[0] and result[1] == -1:
-        await message.answer('Ты заблокирован!', reply_markup=ReplyKeyboardRemove())
+        await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+                             reply_markup=ReplyKeyboardRemove())
         await state.set_state(FSMFillForm.banned)
         return
-    await message.answer(text=random.choice(hz_answers), reply_markup=not_incel_keyboard)
+    if message.sticker:
+        if random.randint(1, 100) < 5:
+            await message.answer('А как тебе мой стикер?')
+            await bot.send_sticker(chat_id=message.chat.id, sticker='CAACAgIAAxkBAAELwF1l-pvCWkbiwxyH-htdYp3sFx9-BQACHgADUWPTK8qfqjqR5o-iNAQ')
+            await message.answer('В фотографиях я лучше разбираюсь.')
+        else:
+            extra = [
+                f"💬 Оценка стикера нейросетью: <b>{round(random.uniform(4, 9), 2)}</b> из <b>10</b>. Шучу, могу только фотографии оценивать.",
+                f"Стикером не получится подписать фоточку, но можно этим эмодзи {message.sticker.emoji}",
+                f"Можешь вместо стикера прислать фото с этим эмодзи {message.sticker.emoji}",
+                f"Прости, я не вижу картинку, я вижу только эмодзи {message.sticker.emoji}. Так что присылай фото, чтобы я увидел.",
+                f"Давай ты изобразишь эту эмоцию {message.sticker.emoji} на фоточке."]
+            await message.answer(
+                random.choice(replicas.get('sticker', ['Стикеры — это хорошо, но мне больше нравятся фоточки']) + extra).replace('$', '"'),
+                disable_web_page_preview=True)
+    elif message.video:
+        extra = [f"😄 Оценка видео нейросетью: <b>{round(random.uniform(4, 9), 2)}</b> из <b>10</b>. Шучу, могу только фотографии оценивать."]
+        await message.answer(random.choice(replicas.get('video', ['Видео — это хорошо, но мне больше нравятся фоточки']) + extra).replace('$', '"'),
+                             disable_web_page_preview=True)
+    elif message.video_note:
+        extra = [f"😄 Оценка кружочка нейросетью: <b>{round(random.uniform(4, 9), 2)}</b> из <b>10</b>. Шучу, могу только фотографии оценивать."]
+        await message.answer(random.choice(replicas.get('video_note', ['Кружочки — это хорошо, но мне больше нравятся фоточки']) + extra).replace('$', '"'),
+                             disable_web_page_preview=True)
+    elif message.voice:
+        if random.randint(1, 100) < 5:
+            duration = message.voice.duration
+            if duration in (11, 12, 13, 14):
+                ending = 'секунд'
+            elif duration % 10 == 1:
+                ending = 'секунда'
+            elif duration % 10 in (2, 3, 4):
+                ending = 'секунды'
+            else:
+                ending = 'секунд'
+            extra = f'Почему только {duration} {ending}? 🥺 Я готов слушать твой голос вечно! Но только если скинешь фоточку'
+            await message.answer(extra, disable_web_page_preview=True)
+            return
+        await message.answer(random.choice(replicas['voice']).replace('$', '"'), disable_web_page_preview=True)
+    elif message.document:
+        if 'image' in message.document.mime_type:
+            await message.answer('Скинь эту же фоточку со сжатием 🥺')
+            return
+        extra = '🗾🎑🏞🌅🌄🌠🎇🎆🌇🌆🏙🌃🌌🌉🌁🩻'
+        await message.answer(
+            random.choice(extra) + ' ' + random.choice(replicas.get('doc', ['Файл — это хорошо, но мне больше нравятся фоточки'])).replace('$', '"'),
+            disable_web_page_preview=True)
+    elif message.text:
+        await message.answer(text=random.choice(replicas.get('unknown', hz_answers)).replace('$', '"'),
+                             reply_markup=get_keyboard(message.from_user.id), disable_web_page_preview=True)
+    else:
+        await message.answer(text=random.choice(hz_answers), reply_markup=not_incel_keyboard)
 
 
 @dp.callback_query()
@@ -2152,14 +2292,12 @@ async def weekly_tierlist(user=972753303):
             res = draw_tier_list(new_d)
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Ошибка при создании тир листа\n{e}')
-            return
         for i in range(1, cnt):
             try:
                 os.remove(f"test_{i}.jpg")
             except Exception as e:
                 image_path = Path(f"test_{i}.jpg").resolve()
                 await bot.send_message(chat_id=972753303, text=f'{e}\nПапка, где должны удалиться файлы: {image_path}')
-                return
         if get_weekly(972753303):
             try:
                 media = []

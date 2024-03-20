@@ -15,8 +15,8 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS results
                   (id INTEGER PRIMARY KEY, photo TEXT, rate FLOAT, user_id INTEGER)''')
 
 
-def add_not_incel_photo(num, photo, user_id):
-    cursor.execute("INSERT INTO results (id, photo, rate, user_id) VALUES (?, ?, ?, ?)", (num, photo, -1, user_id))
+def add_not_incel_photo(num, photo, user_id, rate=-1):
+    cursor.execute("INSERT INTO results (id, photo, rate, user_id) VALUES (?, ?, ?, ?)", (num, photo, rate, user_id))
     conn.commit()
 
 
@@ -163,5 +163,9 @@ def print_db():
 if __name__ == '__main__':
     get_last()
     print_db()
+    cursor.execute("SELECT * FROM results")
+    rows = cursor.fetchall()
+    for row in rows:
+        print(row)
     # print(max_photo_id('nklnkk'))
     # print(len_photos_by_username('nklnkk'))
