@@ -1,4 +1,19 @@
 #
+#                      \`*-.
+#                       )  _`-.
+#                      .  : `. .
+#                      : _   '  \
+#                      ; *` _.   `*-._
+#                      `-.-'          `-.
+#                        ;       `       `.
+#                        :.       .        \
+#                        . \  .   :   .-'   .
+#                        '  `+.;  ;  '      :
+#                        :  '  |    ;       ;-.
+#                        ; '   : :`-:     _.`* ;
+#                    .*' /  .*' ; .*`- +'  `*'
+#                     `*-*   `*-*  `*-*'
+#
 #        _   _  _  _            _               _
 #       | \ | |(_)| |          | |             | |
 #       |  \| | _ | | __  ___  | |  ___  _ __  | | __  ___
@@ -51,7 +66,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from sql_db import check_id, reduce_attempts, set_verified, add_girlphoto, get_users, get_last_commit, \
     add_current_state, get_current_state, add_to_queue, delete_from_queue, get_queue, get_usersinfo_db, \
     get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username, check_user, \
-    get_not_incel, check_new_user
+    get_not_incel, check_new_user, change_queue, get_unban
 from sql_photos import *
 from graphics import *
 from weekly_rates import add_to_weekly, clear_db, get_weekly_db, get_weekly, weekly_cancel, weekly_resume, \
@@ -125,6 +140,20 @@ rate2 = {
     2: 'Полная хуйня',
     1: 'хуже чем полная хуйня',
     0: 'вырвите мне глаза'
+}
+
+rate3 = {
+    10: '#Богиня',
+    9: '#Шоколадная',
+    8: '#Вашей_маме_зять_не_нужен<a href="https://t.me/RatePhotosBot">?</a>',
+    7: '#Прелесть',
+    6: '#Найс',
+    5: '#Мило',
+    4: '#На_любителя',
+    3: '#Сомнительно',
+    2: '#Cтрашное',
+    1: '#Фу',
+    0: '#Кандидат_от_оппозиции'
 }
 incels = get_users()
 
@@ -221,9 +250,19 @@ class ban_username(BaseFilter):
         return message.text[1:5] == 'ban_'
 
 
+class unban_username(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        return message.text[1:7] == 'unban_'
+
+
 class clear_states_username(BaseFilter):
     async def __call__(self, message: Message) -> bool:
         return message.text[1:4] == 'cs_'
+
+
+class change_queue_username(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        return message.text[1:4] == 'cq_'
 
 
 class change_average_filter(BaseFilter):
@@ -254,7 +293,7 @@ def get_keyboard(user_id: int):
 
 
 @dp.message(F.text, ban_username())
-async def ban_username(message: Message):
+async def ban_username_command(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй', reply_markup=get_keyboard(message.from_user.id))
         return
@@ -266,8 +305,21 @@ async def ban_username(message: Message):
         await message.answer(text=f'Пользователь <i>@{s}</i> был успешно забанен!')
 
 
+@dp.message(F.text, unban_username())
+async def unban_username_command(message: Message):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=get_keyboard(message.from_user.id))
+        return
+    s = message.text[7:]
+    result = get_unban(get_id_by_username(s))
+    if result == 0:
+        await message.answer(text=f'Строка с username=<i>"{s}"</i> не найдена в таблице')
+    else:
+        await message.answer(text=f'Пользователь <i>@{s}</i> был успешно разбанен!')
+
+
 @dp.message(F.text, clear_states_username())
-async def ban_username(message: Message):
+async def clear_state_username(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй', reply_markup=get_keyboard(message.from_user.id))
         return
@@ -279,8 +331,24 @@ async def ban_username(message: Message):
         await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
 
 
+@dp.message(F.text, change_queue_username())
+async def change_queue_command(message: Message):
+    if message.from_user.id != 972753303:
+        await message.answer(text='иди нахуй', reply_markup=get_keyboard(message.from_user.id))
+        return
+    s = message.text[4:]
+    try:
+        username = s[:s.find('\n')]
+        new_queue = s[s.find('\n') + 1:]
+        change_queue(get_id_by_username(username), new_queue)
+        await message.answer(f'Очередь для {username} изменена на {new_queue}')
+
+    except Exception as e:
+        await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
+
+
 @dp.message(F.text, change_average_filter())
-async def ban_username(message: Message):
+async def change_average_command(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй', reply_markup=get_keyboard(message.from_user.id))
         return
@@ -341,7 +409,7 @@ async def send_tier_and_delete(message: Message, state: FSMContext):
 
 
 @dp.message(Command(commands='upd_file'))
-async def send_tier_and_delete(message: Message, state: FSMContext):
+async def update_replicas_file(message: Message, state: FSMContext):
     global replicas
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
@@ -365,7 +433,7 @@ async def send_tier_and_delete(message: Message, state: FSMContext):
 
 @dp.callback_query(F.data.in_(['ya_gay_delete_tier_db',
                                'not_delete']))
-async def process_buttons_press(callback: CallbackQuery):
+async def permanently_delete_db(callback: CallbackQuery):
     if callback.data == 'ya_gay_delete_tier_db':
         await callback.message.answer(text='<b>База данных с фотками тир листа удалена!</b>\n\nАдмин даст тебе пизды 💀')
         clear_db()
@@ -1231,6 +1299,7 @@ async def filter_rates(callback: CallbackQuery,
                 if last_username is not None and type(last_username) == str and len(last_username) > 0:
                     if get_id_by_username(last_username) is not None:
                         if states_users.get(last_username, None) is None or states_users[last_username] + datetime.timedelta(hours=1) < datetime.datetime.now():
+                            add_afk(get_id_by_username(last_username))
                             await bot.send_message(
                                 text=f'<b>{last_username}</b>, ебать твой рот, нажми на кнопку, ты последний такой хуесос 😡',
                                 chat_id=get_id_by_username(last_username))
@@ -1254,12 +1323,17 @@ async def filter_rates(callback: CallbackQuery,
 
                 user_rates = ''
                 sorted_rates = sorted(votes.items(), key=lambda x: x[1], reverse=True)
+                rounded = round(avg)
                 for key, value in sorted_rates:
+                    if value == rounded:
+                        add_hit(get_id_by_username(key), 1)
+                    else:
+                        add_hit(get_id_by_username(key))
                     user_id = get_id_by_username(key)
                     if user_id is not None:
                         add_rate_to_avg(user_id, value)
                     user_rates += f'@{key}: <i>{value}</i>\n'
-                rounded = round(avg)
+
                 rounded_public = round(avg_public)
                 note_str_origin = get_note_sql(num)
                 note_str = f': <blockquote>{note_str_origin.replace("/anon", "").strip()}</blockquote>\n' if note_str_origin is not None else '\n\n'
@@ -1270,10 +1344,11 @@ async def filter_rates(callback: CallbackQuery,
                                      has_spoiler=spoiler)
                 if note_str_origin is None or '/anon' not in note_str_origin:
 
-                    txt2 = note_str[2:] + f'Оценено на <b>{avg_public}</b> из <b>10</b>' + f'\n<i>#{rate2[rounded_public].replace(" ", "_")}</i>'
+                    txt2 = note_str[2:] + f'{random.choice(emoji_lol)} <a href="https://t.me/RatePhotosBot">Оценено</a> на <b>{avg_str_public}</b> из <b>10</b>' + f'\n<i>{rate3[rounded_public]}</i>'
                     await bot.send_photo(chat_id=channel_id_public, photo=get_photo_id_by_id(num), caption=txt2)
         except Exception as e:
-            await bot.send_message(chat_id=972753303, text=f'Произошла ошибка после оценки фото № {num} пользователем {callback.from_user.username} \n{e}')
+            if not 'message to delete not found' in e:
+                await bot.send_message(chat_id=972753303, text=f'Произошла ошибка после оценки фото № {num} пользователем {callback.from_user.username} \n{e}')
         try:
             q = get_queue(callback.from_user.id)
             if len(q) == 0:
@@ -1287,6 +1362,8 @@ async def filter_rates(callback: CallbackQuery,
         except Exception as e:
             await bot.send_message(chat_id=972753303,
                                    text=f'Произошла ошибка! Пользователь {callback.from_user.username} не получил фото из очереди\n{e}')
+            delete_from_queue(callback.from_user.id, min(get_queue(callback.from_user.id)))
+            add_current_state(callback.from_user.id, 0, callback.from_user.username)
         return
     elif mailing == 2:
         await callback.message.delete()
@@ -1400,8 +1477,6 @@ async def process_start_command(message: Message, state: FSMContext):
     result = check_id(user_id, username)
     if result[0]:
         await message.answer('Нахуя ты старт нажал', reply_markup=get_keyboard(message.from_user.id))
-        async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_video'):
-            await message.answer_video(video=FSInputFile(path='guide.mp4'))
         await state.set_state(FSMFillForm.verified)
     else:
         if result[1] <= 0   :
@@ -1423,7 +1498,7 @@ async def message_reaction_handler(message_reaction: MessageReactionUpdated):
 
 
 @dp.message(Command(commands='password_yaincel'))
-async def settings(message: Message, state: FSMContext):
+async def password_yaincel(message: Message, state: FSMContext):
     set_verified(message.from_user.id)
     await message.answer(text='Поздравляю, ты теперь в нашей банде инцелов', reply_markup=get_keyboard(message.from_user.id))
     await state.set_state(FSMFillForm.verified)
@@ -1435,7 +1510,7 @@ async def anon(message: Message, state: FSMContext):
 
 
 @dp.message(Command(commands='clear_admin_queues'))
-async def settings(message: Message, state: FSMContext):
+async def clear_admin_queues_command(message: Message, state: FSMContext):
     try:
         for user in get_admins():
             remove_from_admins_queue(user, 0)
@@ -1580,12 +1655,15 @@ async def send_clear_users_db(message: Message):
         -int(x[5].split(',')[-1]) if x[5] is not None else float('inf'), x[1] if x[1] is not None else ''))
     for user in db_incel:
         username = f'@{user[1]}' if user[1] is not None else 'N/A'
-        queue_str = f'<i>Очередь:</i> {user[-2]}' if (user[3] and user[-2] is not None) else '<i>Очередь пуста ✅</i>'
+        queue_str = f'<i>Очередь:</i> {user[-2][:60]}' if (user[3] and user[-2] is not None) else '<i>Очередь пуста ✅</i>'
         line = f'<b>{username}</b> | {queue_str}\n'
         if len(line) + len(txt) < 4096:
             txt += line
         else:
-            await message.answer(text=txt)
+            try:
+                await message.answer(text=txt)
+            except Exception as e:
+                await message.answer(text=f'Ошибка! {e}')
             txt = line
     txt += '\n<b>Попуски:</b>\n'
     for user in db_not_incel:
@@ -1699,23 +1777,44 @@ async def send_users_db(message: Message):
 
 @dp.message(Command(commands='avgs'), F.from_user.id.in_(get_users()))
 async def send_avgs(message: Message):
+    def center_string(s, total_length):
+        s = str(s)
+        remaining_length = total_length - len(s)
+        if remaining_length <= 0:
+            return "<code>" + s[:total_length] + "</code>"
+
+        right_spaces = remaining_length // 2
+        left_spaces = remaining_length - right_spaces
+
+        return "<code>" + " " * left_spaces + s + " " * right_spaces + "</code>"
+
     txt = '<b>Средние значения</b>\n'
     mx_len_username = 0
-    averages = {}
+    averages, overshoot, hit, afk = {}, {}, {}, {}
     for user in incels:
         username = get_username_by_id(user)
         if len(username) > mx_len_username:
             mx_len_username = len(username)
-        average_tuple = get_avg_rate(user)
+        average_tuple = get_avg_stats(user)
         if average_tuple is None:
-            averages[username] = 0
+            averages[username] = afk[username] = overshoot[username] = 0
+            hit[username] = '0.00%'
         else:
-            averages[username] = average_tuple[0] / average_tuple[1]
+            averages[username] = average_tuple[1] / average_tuple[2]
+            overshoot[username] = average_tuple[3]
+            hit[username] = f'{"{:.1f}".format(average_tuple[4] / average_tuple[5] * 100)}%'
+            afk[username] = average_tuple[6]
     averages = sorted(averages.items(), key=lambda x: x[1], reverse=True)
+    txt = f'<code>{"Incel".ljust(mx_len_username)}  </code>   <b>AVG    👟➔👠     🎯      AFK</b>\n'
+    hidden_space = '<code> </code>'
     for username, avg in averages:
         if avg is None:
             avg = 0
-        txt += f'<code>@{username.ljust(mx_len_username)}</code> | <b>{"{:.5f}".format(avg)}</b>\n'
+        if overshoot[username] >= 10 ** 4:
+            overshoot[username] = f'{overshoot[username] // 1000}к'
+        if afk[username] >= 10 ** 4:
+            afk[username] = f'{afk[username] // 1000}к'
+        txt += f'<code>@{username.ljust(mx_len_username)}</code> | <b>{"{:.4f}".format(avg)}</b> |{center_string(overshoot[username], 5)}|{center_string(hit[username], 6)}|<code>{str(afk[username]).rjust(4)}</code>\n'
     await message.answer(txt)
 
 
@@ -1732,6 +1831,8 @@ async def get_queue_rates(message: Message):
         if len(incel_loc[1]) > mx_len_username:
             mx_len_username = len(incel_loc[1])
     cnt = 0
+    db_incel = sorted(db_incel, key=lambda x: len(x[-2].split(',')) if x[-2] is not None else 0, reverse=True)
+
     for incel_loc in db_incel:
         if incel_loc[-2] is None:
             queue = '✅'
@@ -1848,7 +1949,7 @@ async def send_latest_sluts_db(message: Message):
                 for key, value in json.loads(i[2]).items():
                     rates += f'<i>{key}</i> – {value}, '
                 rates = rates[:-2] + '</blockquote>'
-            if i[1] is None:
+            if i[1] is None or len(i[1]) == 0 :
                 caption = ''
             else:
                 caption = f'"<i>{i[1]}</i>" | '
@@ -1953,18 +2054,18 @@ async def remember_to_rate(message: Message, state: FSMContext):
 async def default_photo(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     file_id = message.photo[-1].file_id
-    last_num = get_last()
-    add_photo_id(last_num + 1, file_id, message.from_user.username)
-    add_girlphoto(message.from_user.id, last_num + 1)
     if not result[0]:
         if result[1] == -1:
             await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
                                  reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
+        min_num = get_min()
+        add_photo_id(min_num - 1, file_id, message.from_user.username)
+        add_girlphoto(message.from_user.id, min_num - 1)
         caption = '' if message.caption is None else message.caption
         if caption != '':
-            add_note(last_num + 1, message.caption)
+            add_note(min_num - 1, message.caption)
 
         try:
             if check_new_user(message.from_user.id):
@@ -1974,12 +2075,15 @@ async def default_photo(message: Message, state: FSMContext):
                 text = '🙋🏼‍♀️ Выкладываем в канал'
             else:
                 text = '🙅🏼‍♀️ Не выкладываем в канал'
-            await message.answer(text=f'{random.choice(emoji_lol)} Давай проверим!{note}\n<b>{text}</b>\n\nПравильно?', reply_markup=confirm_keyboard(last_num + 1))
+            await message.answer(text=f'{random.choice(emoji_lol)} Давай проверим!{note}\n<b>{text}</b>\n\nПравильно?',
+                                 reply_markup=confirm_keyboard(min_num - 1))
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 12\n{str(e)}')
         return
 
-
+    last_num = get_last()
+    add_photo_id(last_num + 1, file_id, message.from_user.username)
+    add_girlphoto(message.from_user.id, last_num + 1)
     if message.caption is not None:
         await message.answer(
             text=f'Ты прислал фото с заметкой: <i>{message.caption.replace("/anon", "").strip()}</i>. Оцени фото, которое ты скинул',
@@ -2014,7 +2118,7 @@ async def stat_photo(message: Message, state: FSMContext):
                 os.remove(f'myplot_{user_id}.png')
                 os.remove(f'myplot_{user_id}2.png')
         else:
-            await message.answer(text=f'📶 Пришли <b>более 5 фото</b>, чтобы получить статистику\nТебе осталось прислать {6 - len(not_incel_rates)}', reply_markup=get_keyboard(message.from_user.id))
+            await message.answer(text=f'📶 Пришли <b>не менее 6 фото</b>, чтобы получить статистику\nТебе осталось прислать {6 - len(not_incel_rates)}', reply_markup=get_keyboard(message.from_user.id))
         return
     if len_photos_by_username(message.from_user.username) > 0:
         async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
@@ -2035,7 +2139,33 @@ async def stat_photo(message: Message, state: FSMContext):
         if average is not None:
             avg_float = average[0] / average[1]
             avg = f'\nCредняя оценка: <b>{"{:.2f}".format(avg_float)}</b> ' + emoji[round(avg_float)]
-        await message.answer(text=f'Твое последнее фото оценили {votes}/{users} человек ' + avg)
+            stats = get_stats_extended(message.from_user.id)
+            overshoot = stats[3]
+            hit = stats[4]
+            last_incel = stats[6]
+            if overshoot in (11, 12, 13, 14):
+                ending = 'раз'
+            elif overshoot % 10 == 1:
+                ending = 'раз'
+            elif overshoot % 10 in (2, 3, 4):
+                ending = 'раза'
+            else:
+                ending = 'раз'
+            percentage = '0.00' if stats[5] == 0 else "{:.2f}".format(hit / stats[5] * 100)
+            if float(percentage) > 30:
+                emoji_local = '🤯'
+            else:
+                emoji_local = '🙂'
+            if last_incel in (11, 12, 13, 14):
+                ending3 = 'раз'
+            elif last_incel % 10 == 1:
+                ending3 = 'раз'
+            elif last_incel % 10 in (2, 3, 4):
+                ending3 = 'раза'
+            else:
+                ending3 = 'раз'
+            extra = f'Переобулся: <b>{overshoot} {ending}</b> 🤡\nПроцент угаданной оценки: <b>{percentage}%</b> {emoji_local}\nОказался последним: <b>{last_incel} {ending3}</b> 👎'
+        await message.answer(text=f'Твое последнее фото оценили {votes}/{users} человек' + avg + '\n' + extra)
     else:
         await message.answer(text='Ты еще не присылал никаких фото')
 
@@ -2054,6 +2184,7 @@ async def change_last_rate(message: Message, state: FSMContext):
     if last_rate == 0 or last_rate == 5:
         await message.answer(text='Ты не оценивал чужих фото')
         return
+    add_overshoot(message.from_user.id)
     async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
         await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(last_rate),
                              reply_markup=get_rates_keyboard(last_rate, 2), caption='Ну давай, переобуйся, тварь')

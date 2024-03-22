@@ -30,13 +30,7 @@ def check_id(id: int, username: str) -> bool:
     user_is_banned = cursor.fetchone()
     if user_is_banned[0]:
         return [False, -1]
-
-    cursor.execute("SELECT attempts FROM users_info WHERE id=?", (id,))
-    attempts_amount = cursor.fetchone()[0]
-    if attempts_amount <= 0:
-        cursor.execute("UPDATE users_info SET banned=?, attempts=? WHERE id=?", (True, 0, id,))
-        conn.commit()
-    return [False, attempts_amount]
+    return [False, 1]
 
 
 def check_new_user(id):
@@ -85,6 +79,11 @@ def delete_from_queue(id, num=0):
                 conn.commit()
                 return
         queue = ', '.join(map(str, queue))
+    cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (queue, id,))
+    conn.commit()
+
+
+def change_queue(id, queue):
     cursor.execute("UPDATE users_info SET queue=? WHERE id=?", (queue, id,))
     conn.commit()
 
@@ -179,6 +178,16 @@ def get_ban(id):
     user_id = cursor.fetchone()
     if user_id is not None:
         cursor.execute("UPDATE users_info SET banned=?, verified=? WHERE id=?", (True, False, id,))
+        conn.commit()
+        return 1
+    return 0
+
+
+def get_unban(id):
+    cursor.execute("SELECT username FROM users_info WHERE id=?", (id,))
+    user_id = cursor.fetchone()
+    if user_id is not None:
+        cursor.execute("UPDATE users_info SET banned=?, verified=? WHERE id=?", (False, False, id,))
         conn.commit()
         return 1
     return 0

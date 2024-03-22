@@ -10,8 +10,8 @@ cursor = conn.cursor()
 cursor.execute('''CREATE TABLE IF NOT EXISTS sluts_info 
                   (id INTEGER PRIMARY KEY, note TEXT, votes TEXT, file_id TEXT, origin TEXT)''')
 cursor.execute('''CREATE TABLE IF NOT EXISTS average 
-                  (id INTEGER PRIMARY KEY, sum INTEGER, amount INTEGER)''')
-cursor.execute('''CREATE TABLE IF NOT EXISTS results 
+                  (id INTEGER PRIMARY KEY, sum INTEGER, amount INTEGER, overshoot INTEGER, hit INTEGER, hit_amount INTEGER, afk_times INTEGER)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS results
                   (id INTEGER PRIMARY KEY, photo TEXT, rate FLOAT, user_id INTEGER)''')
 
 
@@ -24,6 +24,53 @@ def get_not_incel_rate(num):
     cursor.execute("SELECT rate FROM results WHERE id=?", (num,))
     rate = cursor.fetchone()
     return None if rate is None else rate[0]
+
+
+def add_overshoot(user_id: int):
+    cursor.execute("SELECT overshoot FROM average WHERE id=?", (user_id,))
+    rows = cursor.fetchone()[0]
+    if rows is None:
+        cursor.execute("UPDATE average SET overshoot=? WHERE id=?", (1, user_id))
+        conn.commit()
+    else:
+        cursor.execute("UPDATE average SET overshoot=? WHERE id=?", (rows + 1, user_id))
+        conn.commit()
+
+
+def add_hit(user_id: int, hit: int = 0):
+    cursor.execute("SELECT hit_amount FROM average WHERE id=?", (user_id,))
+    rows = cursor.fetchone()[0]
+    if rows is None:
+        cursor.execute("UPDATE average SET hit_amount=? WHERE id=?", (1, user_id))
+        conn.commit()
+        if hit != 0:
+            cursor.execute("UPDATE average SET hit=? WHERE id=?", (1, user_id))
+            conn.commit()
+    else:
+        cursor.execute("UPDATE average SET hit_amount=? WHERE id=?", (rows + 1, user_id))
+        conn.commit()
+        if hit != 0:
+            cursor.execute("SELECT hit FROM average WHERE id=?", (user_id,))
+            hit_num = cursor.fetchone()[0]
+            cursor.execute("UPDATE average SET hit=? WHERE id=?", (hit_num + 1, user_id))
+            conn.commit()
+
+
+def add_afk(user_id: int):
+    cursor.execute("SELECT afk_times FROM average WHERE id=?", (user_id,))
+    rows = cursor.fetchone()[0]
+    if rows is None:
+        cursor.execute("UPDATE average SET afk_times=? WHERE id=?", (1, user_id))
+        conn.commit()
+    else:
+        cursor.execute("UPDATE average SET afk_times=? WHERE id=?", (rows + 1, user_id))
+        conn.commit()
+
+
+def get_stats_extended(user_id: int):
+    cursor.execute("SELECT * FROM average WHERE id=?", (user_id,))
+    rows = cursor.fetchone()
+    return rows
 
 
 def add_rate_not_incel(num, rate):
@@ -50,8 +97,8 @@ def add_rate_to_avg(user_id: int, rate: int):
         conn.commit()
 
 
-def get_avg_rate(user_id: int):
-    cursor.execute("SELECT sum, amount FROM average WHERE id=?", (user_id,))
+def get_avg_stats(user_id: int):
+    cursor.execute("SELECT * FROM average WHERE id=?", (user_id,))
     rate_rows = cursor.fetchone()
     return rate_rows
 
@@ -77,7 +124,19 @@ def get_last():
     return rows
 
 
+def get_min():
+    cursor.execute("SELECT MIN(id) FROM sluts_info")
+    rows = cursor.fetchone()[0]
+    if rows is None:
+        return 0
+    if rows == 1:
+        return 0
+    return rows
+
+
 def add_photo_id(num, file_id, username):
+    if num == 0:
+        return 'error'
     cursor.execute("INSERT INTO sluts_info (id, file_id, origin) VALUES (?, ?, ?)", (num, file_id, username))
     conn.commit()
 
@@ -161,11 +220,12 @@ def print_db():
 
 
 if __name__ == '__main__':
-    get_last()
-    print_db()
-    cursor.execute("SELECT * FROM results")
-    rows = cursor.fetchall()
-    for row in rows:
-        print(row)
+    get_stats_extended(972753303)
+    # get_last()
+    # print_db()
+    # cursor.execute("SELECT * FROM results")
+    # rows = cursor.fetchall()
+    # for row in rows:
+    #     print(row)
     # print(max_photo_id('nklnkk'))
     # print(len_photos_by_username('nklnkk'))

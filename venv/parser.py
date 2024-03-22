@@ -130,7 +130,7 @@ def check_valid_url(url: str):
 
 def format_text(text, domain, id):
     n_max = 700
-    text = text.replace('<3', '❤️')
+    text = text.replace('<3', '❤️').replace('<', '').replace('>', '')
     if len(text) > n_max:
         text = text[:n_max] + f'...\n<i><a href="vk.com/{domain}?w=wall{id}">Читать далее</a></i>'
     return text
