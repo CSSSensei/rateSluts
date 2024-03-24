@@ -6,7 +6,7 @@ from typing import Dict
 conn = sqlite3.connect('slutsDB.db')
 cursor = conn.cursor()
 
-# Creating a table with id and info columns
+
 cursor.execute('''CREATE TABLE IF NOT EXISTS sluts_info 
                   (id INTEGER PRIMARY KEY, note TEXT, votes TEXT, file_id TEXT, origin TEXT)''')
 cursor.execute('''CREATE TABLE IF NOT EXISTS average 
@@ -220,9 +220,8 @@ def print_db():
 
 
 if __name__ == '__main__':
-    get_stats_extended(972753303)
     # get_last()
-    # print_db()
+    print_db()
     # cursor.execute("SELECT * FROM results")
     # rows = cursor.fetchall()
     # for row in rows:

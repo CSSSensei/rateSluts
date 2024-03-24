@@ -10,11 +10,64 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS weekly
 
 cursor2.execute('''CREATE TABLE IF NOT EXISTS if_send
                   (id INT PRIMARY KEY, weekly_sending BOOl)''')
+cursor2.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='public_info'")
+table_exists = cursor2.fetchone()
+
+if not table_exists:
+    # Если таблицы не существует, создаем таблицу и добавляем значение
+    cursor2.execute('''CREATE TABLE IF NOT EXISTS public_info
+                      (queue TEXT)''')
+    cursor2.execute("INSERT INTO public_info (queue) VALUES (NULL);")
+    conn2.commit()
+else:
+    cursor2.execute('''CREATE TABLE IF NOT EXISTS public_info
+                  (queue TEXT)''')
+
 
 
 def add_to_weekly(id, avg):
     cursor.execute("INSERT INTO weekly (photo_id, average) VALUES (?, ?)", (id, avg))
     conn.commit()
+
+
+def get_min_from_public_info():
+    cursor2.execute("SELECT queue FROM public_info")
+    queue = cursor2.fetchone()
+    if queue is None or queue[0] is None or queue[0] == '':
+        return set()
+    return min(set(map(int, queue[0].split(','))))
+
+
+def add_to_queue_public_info(num):
+    cursor2.execute("SELECT queue FROM public_info")
+    queue = cursor2.fetchone()
+    if queue is None or queue[0] is None or queue[0] == '':
+        queue = str(num)
+    else:
+        queue = set(map(int, queue[0].split(',')))
+        queue.add(num)
+        queue = ', '.join(map(str, queue))
+    cursor2.execute("UPDATE public_info SET queue=?", (queue,))
+    conn2.commit()
+
+
+def delete_from_queue_public_info(num):
+    cursor2.execute("SELECT queue FROM public_info")
+    queue = cursor2.fetchone()
+    if queue is None or queue[0] is None or queue[0] == '':
+        return
+    else:
+        queue = set(map(int, queue[0].split(',')))
+        if num in queue:
+            queue.remove(num)
+            if len(queue) == 0:
+                queue = None
+                cursor2.execute("UPDATE public_info SET queue=? ", (queue,))
+                conn2.commit()
+                return
+        queue = ', '.join(map(str, queue))
+    cursor2.execute("UPDATE public_info SET queue=?", (queue,))
+    conn2.commit()
 
 
 def clear_db():
@@ -100,4 +153,7 @@ def print_db(n=2):
 
 
 if __name__ == '__main__':
-    print_db(0)
+    # print_db(0)
+    cursor2.execute("SELECT * FROM public_info")
+    queue = cursor2.fetchone()
+    print(queue)
