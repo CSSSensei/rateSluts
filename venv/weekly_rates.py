@@ -156,4 +156,4 @@ if __name__ == '__main__':
     # print_db(0)
     cursor2.execute("SELECT * FROM public_info")
     queue = cursor2.fetchone()
-    print(queue)
+    print(len(queue[0].split(',')), queue)

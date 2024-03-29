@@ -300,6 +300,7 @@ async def ban_username_command(message: Message):
         await message.answer(text='Иди нахуй!', reply_markup=get_keyboard(message.from_user.id))
         return
     s = message.text[5:]
+    delete_row_in_average(get_id_by_username(s))
     result = get_ban(get_id_by_username(s))
     if result == 0:
         await message.answer(text=f'Строка с username: <i>"{s}"</i> не найдена в таблице')
@@ -1324,11 +1325,9 @@ async def send_incel_photo(callback: Union[CallbackQuery, None] = None, user_id:
 
     except Exception as e:
         error_text = f'Произошла ошибка! Пользователь {username if username != 0 else "id:"} ({user_id}) не получил фото из очереди.\n{e}'
-        await bot.send_message(chat_id=972753303, text=error_text)
+        if not 'specified new message content and reply markup are exactly the same' in str(e):
+            await bot.send_message(chat_id=972753303, text=error_text)
 
-        min_queue_id = min(get_queue(user_id)) if user_id else None
-        delete_from_queue(user_id, min_queue_id)
-        add_current_state(user_id, 0, username)
 
 
 @dp.callback_query(RateCallBack.filter())
@@ -1344,6 +1343,12 @@ async def filter_rates(callback: CallbackQuery,
         photo_is_not_posted = False  # индикатор, который отвечает за публикацию поста в канал (для того чтобы после изменения оценки пост не выложился еще раз)
     add_rate(num, callback.from_user.username, callback_data.r)
     delete_from_queue(callback.from_user.id, num)
+    last_upd = get_last_upd(callback.from_user.id)
+    current_time = int(time.time())
+    if current_time - last_upd <= 60:
+        increment_time(callback.from_user.id, current_time - last_upd, current_time)
+    else:
+        increment_time(callback.from_user.id, 1, current_time)
     if mailing == 1:
         try:
             votes = get_votes(num)
@@ -1581,8 +1586,20 @@ async def about(message: Message, state: FSMContext):
     await message.answer(replicas['about'].replace('$', ''), disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
 
 
-@dp.message(Command(commands='quote'))
-async def quote(message: Message):
+def format_caption(text):
+    if text is None:
+        return ''
+    if text.lower().count('(с)') + text.lower().count('(c)') + text.count('©') == 0:
+        caption = f'<blockquote>{text}</blockquote>'
+    else:
+        if '©' in text:
+            caption = '<blockquote>' + text[:text.find('©') - 1] + '</blockquote>' + text[text.find('©'):]
+        else:
+            caption = '<blockquote>' + text[:text.find('(') - 1] + '</blockquote>' + text[text.find('('):]
+    return caption
+
+
+async def send_quote(user_id):
     url = "http://api.forismatic.com/api/1.0/"
     params = {
         "method": "getQuote",
@@ -1591,10 +1608,10 @@ async def quote(message: Message):
     }
     try:
         rand_int = random.random()
-        keyboard: list[list[InlineKeyboardButton]] = [
-            [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]]
+        keyboard = [[InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]]
         markup_local = InlineKeyboardMarkup(inline_keyboard=keyboard)
-        if rand_int <= 0.01:  # Шанс 1%
+
+        if rand_int <= 0.01:
             quote = legendary_quote
         elif rand_int <= 0.4:
             try:
@@ -1605,73 +1622,30 @@ async def quote(message: Message):
             if result is None:
                 return
             if result[0]:
-                if result[1]:
-                    if result[1].lower().count('(с)') + result[1].lower().count('(c)') + result[1].count('©') == 0:
-                        caption = f'<blockquote>{result[1]}</blockquote>'
-                    else:
-                        caption = '<blockquote>' + result[1][:result[1].find('(') - 1] + '</blockquote>' + result[1][result[1].find('('):]
-                await message.answer_photo(photo=result[0], caption=caption, reply_markup=markup_local)
+                caption = format_caption(result[1])
+                await bot.send_photo(chat_id=user_id, photo=result[0], caption=caption, reply_markup=markup_local)
             else:
-                if result[1].lower().count('(с)') + result[1].lower().count('(c)') + result[1].count('©') == 0:
-                    caption = f'<blockquote>{result[1]}</blockquote>'
-                else:
-                    caption = '<blockquote>' + result[1][:result[1].find('(') - 1] + '</blockquote>' + result[1][result[1].find('('):]
-                await message.answer(text=caption, reply_markup=markup_local)
+                caption = format_caption(result[1])
+                await bot.send_message(chat_id=user_id, text=caption, reply_markup=markup_local)
             return
         else:
             response = requests.get(url, params=params)
-            quote = response.json()["quoteText"]
+            quote = response.json().get("quoteText")
 
-        await message.answer(text=f'<blockquote>{quote}</blockquote>', reply_markup=markup_local)
+        await bot.send_message(chat_id=user_id, text=f'<blockquote>{quote}</blockquote>', reply_markup=markup_local)
     except requests.RequestException as e:
-        await message.answer(text=f'<i>{legendary_quote}</i>')
+        await bot.send_message(chat_id=user_id, text=f'<i>{legendary_quote}</i>')
+
+
+@dp.message(Command(commands='quote'))
+async def quote(message: Message):
+    await send_quote(message.from_user.id)
 
 
 @dp.callback_query(F.data == 'more')
 async def process_more_press(callback: CallbackQuery):
-    url = "http://api.forismatic.com/api/1.0/"
-    params = {
-        "method": "getQuote",
-        "format": "json",
-        "lang": "ru"
-    }
-    try:
-        await callback.answer()
-        rand_int = random.random()
-        keyboard: list[list[InlineKeyboardButton]] = [
-            [InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]]
-        markup_local = InlineKeyboardMarkup(inline_keyboard=keyboard)
-        if rand_int <= 0.01:  # Шанс 1%
-            quote = legendary_quote
-        elif rand_int <= 0.25:
-            try:
-                result = get_randQuote()
-            except Exception as e:
-                await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 9\n{e}')
-                return
-            if result is None:
-                return
-            if result[0]:
-                if result[1]:
-                    if result[1].lower().count('(с)') + result[1].lower().count('(c)') + result[1].count('©') == 0:
-                        caption = f'<blockquote>{result[1]}</blockquote>'
-                    else:
-                        caption = '<blockquote>' + result[1][:result[1].find('(')-1] + '</blockquote>'+ result[1][result[1].find('('):]
-                await callback.message.answer_photo(photo=result[0], caption=caption, reply_markup=markup_local)
-            else:
-                if result[1].lower().count('(с)') + result[1].lower().count('(c)') + result[1].count('©') == 0:
-                    caption = f'<blockquote>{result[1]}</blockquote>'
-                else:
-                    caption = '<blockquote>' + result[1][:result[1].find('(') - 1] + '</blockquote>' + result[1][result[1].find('('):]
-                await callback.message.answer(text=caption, reply_markup=markup_local)
-            return
-        else:
-            response = requests.get(url, params=params)
-            quote = response.json()["quoteText"]
-
-        await callback.message.answer(text=f'<blockquote>{quote}</blockquote>', reply_markup=markup_local)
-    except requests.RequestException as e:
-        await callback.message.answer(text=f'<i>{legendary_quote}</i>')
+    await callback.answer()
+    await send_quote(callback.from_user.id)
 
 
 @dp.message(Command(commands='get_users'), F.from_user.id.in_(incels))
@@ -1879,6 +1853,22 @@ async def get_queue_rates(message: Message):
     await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
 
 
+@dp.message(Command(commands='wasted_time'), F.from_user.id.in_(get_users()))
+async def get_queue_rates(message: Message):
+    txt = '<b>Проёбано времени</b>\n'
+    mx_len_username = 0
+    wasted = {}
+    for user in incels:
+        username = get_username_by_id(user)
+        wasted[username] = get_avg_stats(user)[8]
+        if len(username) > mx_len_username:
+            mx_len_username = len(username)
+    wasted = sorted(wasted.items(), key=lambda x: x[1], reverse=True)
+    for user, w_time in wasted:
+        txt += f'<code>@{user.ljust(mx_len_username)}</code> | {convert_unix_time(w_time)}\n'
+    await message.answer(txt)
+
+
 @dp.message(Command(commands='remove_quote'), F.from_user.id.in_(get_users()))
 async def remove_quote(message: Message):
     if len(message.text) <= len('remove_quote') + 2:
@@ -1906,7 +1896,7 @@ async def send_statham_db(message: Message):
 
 @dp.message(Command(commands='getcoms'), F.from_user.id.in_(get_users()))
 async def get_all_commands(message: Message):
-    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/getcoms\n/about'
+    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/getcoms\n/about'
     await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
 
 
@@ -2118,7 +2108,7 @@ async def default_photo(message: Message, state: FSMContext):
     add_girlphoto(message.from_user.id, last_num + 1)
     if message.caption:
         await message.answer(
-            text=f'Ты прислал фото с заметкой: <i>{message.caption.replace("/anon", "").strip()}</i>. Оцени фото, которое ты скинул',
+            text=f'Ты прислал фото с заметкой: <i>{message.caption}</i>. Оцени фото, которое ты скинул',
             reply_markup=get_rates_keyboard(last_num + 1, 0))
         add_note(last_num + 1, message.caption)
     else:
@@ -2170,10 +2160,10 @@ async def stat_photo(message: Message, state: FSMContext):
         users = len(get_users())
         if votes > users:
             users = votes
-        stats = get_stats_extended(message.from_user.id)
+        stats = get_avg_stats(message.from_user.id)
         avg = ''
         if stats:
-            avg_float = stats[1] / stats[2]
+            avg_float = stats[1] / stats[2] if stats[2] != 0 else 0
             avg = f'\nCредняя оценка: <b>{"{:.2f}".format(avg_float)}</b> ' + emoji[round(avg_float)]
             overshoot = stats[3]
             hit = stats[4]
@@ -2191,6 +2181,10 @@ async def stat_photo(message: Message, state: FSMContext):
                 emoji_local = '🤯'
             else:
                 emoji_local = '🙂'
+            if last_incel < get_large_last_incel():
+                emoji_local2 = '👍'
+            else:
+                emoji_local2 = '👎'
             if last_incel in (11, 12, 13, 14):
                 ending3 = 'раз'
             elif last_incel % 10 == 1:
@@ -2199,7 +2193,7 @@ async def stat_photo(message: Message, state: FSMContext):
                 ending3 = 'раза'
             else:
                 ending3 = 'раз'
-            extra = f'Переобулся: <b>{overshoot} {ending}</b> 🤡\nПроцент угаданной оценки: <b>{percentage}%</b> {emoji_local}\nОказался последним: <b>{last_incel} {ending3}</b> 👎'
+            extra = f'Переобулся: <b>{overshoot} {ending}</b> {["🤡", "👠"][overshoot < get_large_overshoot()]}\nПроцент угаданной оценки: <b>{percentage}%</b> {emoji_local}\nОказался последним: <b>{last_incel} {ending3}</b> {emoji_local2}\nПроёбано: <b>{convert_unix_time(stats[8])}</b>'
         await message.answer(text=f'Твое последнее фото оценили {votes}/{users} человек' + avg + '\n' + extra)
     else:
         await message.answer(text='Ты еще не присылал никаких фото')
@@ -2414,7 +2408,7 @@ async def any_message(message: Message, state: FSMContext):
             if i in message.text:
                 anecdotes = [
                     'Идут три инвалида по пустыне.\nСлепой, безрукий и колясочник.\nИдут идут и видят оазис. Ну безрукий туда ныряет. Вылазит и видит, что у него руки выросли. Говорит остальным что он волшебный и сразу за ним туда нырнул слепой. Вылазит и говорит:\n— Братцы, я теперь вижу\nА за ним со всех сил ковыляет до оазиса колясочник. Ныряет.\nВылезает и говорит:\n— У меня, блять, теперь новые покрышки.',
-                    'На съезд инвалидов колясочников никто не пришёл.']
+                    'На съезд инвалидов-колясочников никто не пришёл.']
                 await message.answer(text=random.choice(anecdotes),
                                      reply_markup=get_keyboard(message.from_user.id))
                 return
@@ -2505,6 +2499,8 @@ async def post_public():
         num = get_min_from_public_info()
         delete_from_queue_public_info(num)
         votes = get_votes(num)
+        if len(votes.keys()) == 0:
+            continue
         avg = sum(votes.values()) / len(votes.keys())
         avg_public = min(avg + 2, 10)
         avg_str_public = '{:.2f}'.format(avg_public)

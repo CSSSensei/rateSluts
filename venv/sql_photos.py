@@ -8,16 +8,67 @@ cursor = conn.cursor()
 
 
 cursor.execute('''CREATE TABLE IF NOT EXISTS sluts_info 
-                  (id INTEGER PRIMARY KEY, note TEXT, votes TEXT, file_id TEXT, origin TEXT)''')
+                  (id INT PRIMARY KEY, note TEXT, votes TEXT, file_id TEXT, origin TEXT)''')
 cursor.execute('''CREATE TABLE IF NOT EXISTS average 
-                  (id INTEGER PRIMARY KEY, sum INTEGER, amount INTEGER, overshoot INTEGER, hit INTEGER, hit_amount INTEGER, afk_times INTEGER)''')
+                  (id INT PRIMARY KEY, sum INT, amount INT, overshoot INT, hit INT, hit_amount INT, afk_times INT, last_upd INT, total_time INT)''')
 cursor.execute('''CREATE TABLE IF NOT EXISTS results
-                  (id INTEGER PRIMARY KEY, photo TEXT, rate FLOAT, user_id INTEGER)''')
+                  (id INT PRIMARY KEY, photo TEXT, rate FLOAT, user_id INT)''')
 
 
 def add_not_incel_photo(num, photo, user_id, rate=-1):
     cursor.execute("INSERT INTO results (id, photo, rate, user_id) VALUES (?, ?, ?, ?)", (num, photo, rate, user_id))
     conn.commit()
+
+
+def add_new_user_to_average(user_id):
+    cursor.execute(
+        "INSERT INTO average (id, sum, amount, overshoot, hit, hit_amount, afk_times, last_upd, total_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (user_id, 0, 0, 0, 0, 0, 0, 0, 0))
+    conn.commit()
+
+
+def get_last_upd(user_id: int):
+    cursor.execute("SELECT last_upd FROM average WHERE id=?", (user_id,))
+    last_upd = cursor.fetchone()
+    if last_upd is None:
+        add_new_user_to_average(user_id)
+        return 0
+    return last_upd[0]
+
+
+def increment_time(user_id: int, time_delta: int, current_time: int):
+    cursor.execute("SELECT total_time FROM average WHERE id=?", (user_id,))
+    total_time = cursor.fetchone()
+    if total_time is None:
+        add_new_user_to_average(user_id)
+        total_time = 0
+    else:
+        total_time = total_time[0]
+    cursor.execute("UPDATE average SET total_time=?, last_upd=? WHERE id=?", (total_time + time_delta, current_time, user_id))
+    conn.commit()
+
+
+def change_last_update(user_id: int, current_time: int):
+    cursor.execute("UPDATE average SET last_upd=? WHERE id=?", (current_time, user_id))
+    conn.commit()
+
+
+def convert_unix_time(unix_time):
+    days, remainder = divmod(unix_time, 24 * 3600)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    time_units = []
+
+    if days > 0:
+        time_units.append(f"{days} дн.")
+    if hours > 0 or days > 0:
+        time_units.append(f"{hours} ч.")
+    if minutes > 0 or hours > 0 or days > 0:
+        time_units.append(f"{minutes} мин.")
+    time_units.append(f"{seconds} с.")
+
+    return ' '.join(time_units)
 
 
 def get_not_incel_rate(num):
@@ -28,49 +79,43 @@ def get_not_incel_rate(num):
 
 def add_overshoot(user_id: int):
     cursor.execute("SELECT overshoot FROM average WHERE id=?", (user_id,))
-    rows = cursor.fetchone()[0]
+    rows = cursor.fetchone()
     if rows is None:
-        cursor.execute("UPDATE average SET overshoot=? WHERE id=?", (1, user_id))
-        conn.commit()
+        add_new_user_to_average(user_id)
+        rows = 0
     else:
-        cursor.execute("UPDATE average SET overshoot=? WHERE id=?", (rows + 1, user_id))
-        conn.commit()
+        rows = rows[0]
+    cursor.execute("UPDATE average SET overshoot=? WHERE id=?", (rows + 1, user_id))
+    conn.commit()
 
 
 def add_hit(user_id: int, hit: int = 0):
     cursor.execute("SELECT hit_amount FROM average WHERE id=?", (user_id,))
-    rows = cursor.fetchone()[0]
+    rows = cursor.fetchone()
     if rows is None:
-        cursor.execute("UPDATE average SET hit_amount=? WHERE id=?", (1, user_id))
-        conn.commit()
-        if hit != 0:
-            cursor.execute("UPDATE average SET hit=? WHERE id=?", (1, user_id))
-            conn.commit()
+        add_new_user_to_average(user_id)
+        rows = 0
     else:
-        cursor.execute("UPDATE average SET hit_amount=? WHERE id=?", (rows + 1, user_id))
+        rows = rows[0]
+    cursor.execute("UPDATE average SET hit_amount=? WHERE id=?", (rows + 1, user_id))
+    conn.commit()
+    if hit != 0:
+        cursor.execute("SELECT hit FROM average WHERE id=?", (user_id,))
+        hit_num = cursor.fetchone()[0]
+        cursor.execute("UPDATE average SET hit=? WHERE id=?", (hit_num + 1, user_id))
         conn.commit()
-        if hit != 0:
-            cursor.execute("SELECT hit FROM average WHERE id=?", (user_id,))
-            hit_num = cursor.fetchone()[0]
-            cursor.execute("UPDATE average SET hit=? WHERE id=?", (hit_num + 1, user_id))
-            conn.commit()
 
 
 def add_afk(user_id: int):
     cursor.execute("SELECT afk_times FROM average WHERE id=?", (user_id,))
-    rows = cursor.fetchone()[0]
-    if rows is None:
-        cursor.execute("UPDATE average SET afk_times=? WHERE id=?", (1, user_id))
-        conn.commit()
-    else:
-        cursor.execute("UPDATE average SET afk_times=? WHERE id=?", (rows + 1, user_id))
-        conn.commit()
-
-
-def get_stats_extended(user_id: int):
-    cursor.execute("SELECT * FROM average WHERE id=?", (user_id,))
     rows = cursor.fetchone()
-    return rows
+    if rows is None:
+        add_new_user_to_average(user_id)
+        rows = 0
+    else:
+        rows = rows[0]
+    cursor.execute("UPDATE average SET afk_times=? WHERE id=?", (rows + 1, user_id))
+    conn.commit()
 
 
 def add_rate_not_incel(num, rate):
@@ -100,7 +145,32 @@ def add_rate_to_avg(user_id: int, rate: int):
 def get_avg_stats(user_id: int):
     cursor.execute("SELECT * FROM average WHERE id=?", (user_id,))
     rate_rows = cursor.fetchone()
+    if rate_rows is None:
+        add_new_user_to_average(user_id)
+        cursor.execute("SELECT * FROM average WHERE id=?", (user_id,))
+        rate_rows = cursor.fetchone()
     return rate_rows
+
+
+def get_large_overshoot():
+    cursor.execute("SELECT * FROM average")
+    rows = cursor.fetchone()
+    cursor.execute('''SELECT DISTINCT overshoot
+                      FROM average
+                      ORDER BY overshoot DESC''')
+    second_largest_overshoot = cursor.fetchall()[int(0.25 * len(rows)) - 1][0]
+    return second_largest_overshoot
+
+
+def get_large_last_incel():
+    cursor.execute("SELECT * FROM average")
+    rows = cursor.fetchone()
+    cursor.execute('''SELECT DISTINCT afk_times
+                      FROM average
+                      ORDER BY overshoot DESC''')
+    second_largest_last_incel = cursor.fetchall()[int(0.25 * len(rows)) - 1][0]
+    return second_largest_last_incel
+
 
 
 def change_avg_rate(user_id: int, sum: int, amount: int):
@@ -207,21 +277,33 @@ def get_sluts_db():
     return rows
 
 
+def delete_row_in_average(user_id):
+    cursor.execute("DELETE FROM average WHERE id=?", (user_id,))
+    conn.commit()
+    if cursor.rowcount == 0:
+        return 0
+    return 1
+
+
 def print_db():
     cursor.execute("SELECT * FROM sluts_info")
     rows = cursor.fetchall()
     for row in rows:
         print(row)
+
+
+def print_average():
     cursor.execute("SELECT * FROM average")
     rows = cursor.fetchall()
     for row in rows:
-        print(row, row[1] / row[2])
+        print(row)
 
 
 
 if __name__ == '__main__':
     # get_last()
-    print_db()
+    #print_db()
+    print_average()
     # cursor.execute("SELECT * FROM results")
     # rows = cursor.fetchall()
     # for row in rows:
