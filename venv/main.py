@@ -66,15 +66,16 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from sql_db import check_id, reduce_attempts, set_verified, add_girlphoto, get_users, get_last_commit, \
     add_current_state, get_current_state, add_to_queue, delete_from_queue, get_queue, get_usersinfo_db, \
     get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username, check_user, \
-    get_not_incel, check_new_user, change_queue, get_unban
+    get_not_incel, check_new_user, change_queue, get_unban, add_new_birthday, get_birthday, get_top_incels
 from sql_photos import *
 from graphics import *
 from weekly_rates import add_to_weekly, clear_db, get_weekly_db, get_weekly, weekly_cancel, weekly_resume, \
-    get_weekly_db_info, get_min_from_public_info, add_to_queue_public_info, delete_from_queue_public_info
+    get_weekly_db_info, get_min_from_public_info, add_to_queue_public_info, delete_from_queue_public_info, public_queue
 from tier_list import draw_tier_list
 from statham import get_randQuote, insert_quote, get_statham_db, del_quote
 from administrators import *
 from parser import *
+from cv_color import *
 
 load_dotenv(find_dotenv())
 
@@ -93,7 +94,17 @@ legendary_quote = 'Назвался груздем — пошёл на хуй\n�
 hz_answers = ['Я тебя не понимаю...', 'Я не понимаю, о чем ты', 'Что ты имеешь в виду? 🧐', 'Я в замешательстве 🤨',
               'Не улавливаю смысла 🙃', 'Что ты пытаешься сказать❓', 'Не понимаю твоего сообщения 😕',
               '🤷‍♂️ Не понимаю 🤷‍♀️']
-emoji_lol = '🍏🍎🍐🍊🍋🍌🍉🍇🍓🫐🍈🍒🍑🥭🍍🥥🥝🍅🍆🥑🫛🥦🥬🥒🌶🫑🌽🥕🫒🧄🧅🥔🍠🫚🥐🥯🍞🥖🥨🧀🥚🍳🧈🥞🧇🌭🍔🍟🍕🥪🥙🧆🌮🌯🫔🥗🥘🫕🥫🍝🍜🍲🍛🍣🍱🥟🦪🍤🍙🍚🍘🍥🥠🥮🍡🍧🍨🍦🥧🧁🍰🎂🍮🍭🍬🍫🍿🍩🍪🌰🍯🥛🫗🍼🫖☕️🍵🧃🥤🧋🍶🍾🧊⚽️🏀🏈⚾️🥎🎾🏐🏉🥏🎱🪀🏓🏸🎧🎫🎟🎲♟🎯🎳🎮🎰🧩🗾🎑🏞🌅🌄🌠🎇🎆🌇🌆🏙🌃🌌🌉🌁💣🧨💊🎁🎈🛍🪩📖📚📙📘📗📕📒📔📓📰🗞🧵👚👕👖👔💼👜🎩🧢👒🎓🧳👓🕶🥽🌂💍🐶🐭🐹🐰🦊🐻🐼🐻‍❄️🐨🐯🦁🐸🐵🙈🙉🙊🐒🐱🐔🐧🐦🐤🐣🐥🪿🦆🐦‍⬛️🦅🦉🦇🐺🐴🦄🐝🦋🦖🦕🐙🦑🪼🦐🐬🐋🐳🦈🦭🪽🕊🪶🐉🐲🦔🐁🌵🎄🌲🌳🌴🪵🌱🌿☘️🍀🎍🪴🎋🍃🍂🍁🪺🐚🪸🪨🌾💐🌷🌹🥀🪻🪷🌺🌸🌼🌻🌎🌍🌏🪐💫⭐️✨💥🔥🌪🌈☀️🌤⛅️🌥☁️☃️⛄️💨☂️🌊🌫'
+emoji_lol = ['🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🫛', '🥦', '🥬', '🥒', '🌶', '🫑',
+             '🌽', '🥕', '🫒', '🧄', '🧅', '🥔', '🍠', '🫚', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🧆',
+             '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍡', '🍧', '🍨', '🍦',
+             '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🍯', '🥛', '🫗', '🍼', '🫖', '☕️', '🍵', '🧃', '🥤', '🧋', '🍶', '🍾', '🧊', '⚽️',
+             '🏀', '🏈', '⚾️', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🎧', '🎫', '🎟', '🎲', '♟', '🎯', '🎳', '🎮', '🎰', '🧩', '🗾', '🎑', '🏞', '🌅',
+             '🌄', '🌠', '🎇', '🎆', '🌇', '🌆', '🏙', '🌃', '🌌', '🌉', '🌁', '💣', '🧨', '💊', '🎁', '🎈', '🛍', '🪩', '📖', '📚', '📙', '📘', '📗', '📕', '📒', '📔',
+             '📓', '📰', '🗞', '🧵', '👚', '👕', '👖', '👔', '💼', '👜', '🎩', '🧢', '👒', '🎓', '🧳', '👓', '🕶', '🥽', '🌂', '💍', '🐶', '🐭', '🐹', '🐰', '🦊', '🐻',
+             '🐼', '🐻‍❄️', '🐨', '🐯', '🦁', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🐱', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🪿', '🦆', '🐦‍⬛️', '🦅', '🦉', '🦇', '🐺',
+             '🐴', '🦄', '🐝', '🦋', '🦖', '🦕', '🐙', '🦑', '🪼', '🦐', '🐬', '🐋', '🐳', '🦈', '🦭', '🪽', '🕊', '🪶', '🐉', '🐲', '🦔', '🐁', '🌵', '🎄', '🌲', '🌳',
+             '🌴', '🪵', '🌱', '🌿', '☘️', '🍀', '🎍', '🪴', '🎋', '🍃', '🍂', '🍁', '🪺', '🐚', '🪸', '🪨', '🌾', '💐', '🌷', '🌹', '🥀', '🪻', '🪷', '🌺', '🌸', '🌼',
+             '🌻', '🌎', '🌍', '🌏', '🪐', '💫', '⭐️', '✨', '💥', '🔥', '🌪', '🌈', '☀️', '🌤', '⛅️', '🌥', '☁️', '☃️', '⛄️', '💨', '☂️', '🌊', '🌫']
 emoji_banned = '⛔❗🤯😳❌⭕🛑📛🚫💢🚷📵🔴🟥💣🗿🐓🙊🙉🙈🐷🫵🥲🙁😕😟😔😞😧😦😯🙄😵💀🚨😐'
 dice_points = {'🎲': 6, '🎯': 6, '🎳': 6, '🏀': 4, '⚽': 3, '🎰': 64}
 replicas = {}
@@ -257,6 +268,11 @@ class unban_username(BaseFilter):
         return message.text[1:7] == 'unban_'
 
 
+class add_birthday_command(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        return message.text[1:13] == 'add_birthday'
+
+
 class clear_states_username(BaseFilter):
     async def __call__(self, message: Message) -> bool:
         return message.text[1:4] == 'cs_'
@@ -319,6 +335,22 @@ async def unban_username_command(message: Message):
         await message.answer(text=f'Строка с username=<i>"{s}"</i> не найдена в таблице')
     else:
         await message.answer(text=f'Пользователь <i>@{s}</i> был успешно разбанен! Зря...')
+
+
+@dp.message(F.text, add_birthday_command(), F.from_user.id.in_(incels))
+async def add_birthday_func(message: Message):
+    pattern = r"/add_birthday_(\w+)_(\d{4}-\d{2}-\d{2})"
+    match = re.match(pattern, message.text)
+    if match:
+        username = match.group(1)
+        date = match.group(2)
+        try:
+            add_new_birthday(get_id_by_username(username), int(datetime.datetime.strptime(date, '%Y-%m-%d').timestamp()))
+            await message.answer(f'Ты добавил ДР <i>{date}</i> для пользователя <b>@{username}</b>')
+        except Exception as e:
+            await message.answer(f'Произошла ошибка!\n{e}')
+    else:
+        await message.answer("Не удалось извлечь имя пользователя и дату из сообщения.")
 
 
 @dp.message(F.text, clear_states_username())
@@ -412,6 +444,11 @@ async def send_tier_and_delete(message: Message, state: FSMContext):
     await stat_photo(message, state)
 
 
+# @dp.message(Command(commands='sex'))
+# async def send_tier_and_delete(message: Message, state: FSMContext):
+#     pass
+
+
 @dp.message(Command(commands='delete_tier_list'))
 async def send_tier_and_delete(message: Message, state: FSMContext):
     if message.from_user.id != 972753303:
@@ -501,7 +538,7 @@ async def del_username(message: Message):
         await message.answer(text=f'Строка с username: <i>"{s}"</i> была успешно удалена')
 
 
-def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_to_delete=0, back_ids=0):
+def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_to_delete=0, back_ids=0, delete=True):
     array_buttons: list[list[InlineKeyboardButton]] = [[], []]
     if back:
         array_buttons = [[InlineKeyboardButton(text='🔙',
@@ -514,7 +551,8 @@ def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_
             callback_data=RateCallBack(r=i, photo_id=num, mailing=mailing).pack()))
 
     if mailing == 3:
-        add_note(num, '')
+        if delete:
+            add_note(num, '')
         array_buttons.append([
             InlineKeyboardButton(text='🔙', callback_data=ManageSettings(action=8, photo_id=ids, message_to_delete=message_to_delete,
                                                                         back_ids=back_ids).pack())])
@@ -1217,11 +1255,10 @@ async def get_caption_group(message: Message, state: FSMContext):
         return
     caption_global[message.from_user.id] = (0, 0)
     add_note(num, message.text)
-    caption_global[message.from_user.id]
     async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
         await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(num),
                              caption=f'Охуенная заметка: <b><i>{message.text}</i></b>. А теперь оцени фото, мразь',
-                             reply_markup=get_rates_keyboard(num, mailing=3, ids=photo_id))
+                             reply_markup=get_rates_keyboard(num, mailing=3, ids=photo_id, delete=False))
     previous = get_message_to_delete(message.from_user.id)
     if '-' in previous:
         previous = list(map(int, previous.split('-')))
@@ -1742,9 +1779,10 @@ async def backup_files(message: Message):
             doc3 = InputMediaDocument(media=FSInputFile("weekly.db"))
             doc4 = InputMediaDocument(media=FSInputFile("weekly_info.db"))
             doc5 = InputMediaDocument(media=FSInputFile("admins.db"))
-            doc6 = InputMediaDocument(media=FSInputFile("statham.db"),
+            doc6 = InputMediaDocument(media=FSInputFile("emoji.db"))
+            doc7 = InputMediaDocument(media=FSInputFile("statham.db"),
                                       caption=f'Бэкап <i>{datetime.datetime.now().date()}</i>')
-            await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5, doc6], chat_id=message.chat.id)
+            await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5, doc6, doc7], chat_id=message.chat.id)
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! При отправке файлов для бэкапа.\n{e}')
 
@@ -1853,6 +1891,15 @@ async def get_queue_rates(message: Message):
     await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
 
 
+@dp.message(Command(commands='public_queue'), F.from_user.id.in_(get_users()))
+async def get_queue_rates(message: Message):
+    try:
+        queue_length = public_queue()
+        await message.answer(text=f'В очереди запоститься: <b>{queue_length}</b>', reply_markup=get_keyboard(message.from_user.id))
+    except Exception as e:
+        await message.answer(text=f'Произошла ошибка!\n{e}', reply_markup=get_keyboard(message.from_user.id))
+
+
 @dp.message(Command(commands='wasted_time'), F.from_user.id.in_(get_users()))
 async def get_queue_rates(message: Message):
     txt = '<b>Проёбано времени</b>\n'
@@ -1896,7 +1943,7 @@ async def send_statham_db(message: Message):
 
 @dp.message(Command(commands='getcoms'), F.from_user.id.in_(get_users()))
 async def get_all_commands(message: Message):
-    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/getcoms\n/about'
+    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/public_queue\n/getcoms\n/about'
     await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
 
 
@@ -2115,7 +2162,6 @@ async def default_photo(message: Message, state: FSMContext):
         await message.answer(
             text='Оцени фото, которое ты скинул',
             reply_markup=get_rates_keyboard(last_num + 1, 0))
-    await state.set_state(FSMFillForm.rating)
 
 
 @dp.message(F.text == 'Фото из очереди 🌆')
@@ -2346,11 +2392,12 @@ async def any_message(message: Message, state: FSMContext):
     result = check_id(message.from_user.id, message.from_user.username)
     if not result[0] and result[1] != -1:
         if message.text:
-            await bot.send_message(chat_id=972753303, text=f'<i>@{message.from_user.username}:</i>\n"{message.text}"', disable_notification=True)
-        else:
+            pass
+            #await bot.send_message(chat_id=972753303, text=f'<i>@{message.from_user.username}:</i>\n"{message.text}"', disable_notification=True)
+        elif message.video or message.animation:
             caption = '' if message.caption is None else f':\n"{message.caption}"'
             await bot.copy_message(from_chat_id=message.chat.id, chat_id=972753303, message_id=message.message_id, disable_notification=True,
-                                   caption=f'<i>@{message.from_user.username}</i>{caption}')
+                               caption=f'<i>@{message.from_user.username}</i>{caption}')
     if not result[0] and result[1] == -1:
         await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
                              reply_markup=ReplyKeyboardRemove())
@@ -2431,9 +2478,10 @@ async def weekly_tierlist(user=972753303):
             doc3 = InputMediaDocument(media=FSInputFile("weekly.db"))
             doc4 = InputMediaDocument(media=FSInputFile("weekly_info.db"))
             doc5 = InputMediaDocument(media=FSInputFile("admins.db"))
-            doc6 = InputMediaDocument(media=FSInputFile("statham.db"),
+            doc6 = InputMediaDocument(media=FSInputFile("emoji.db"))
+            doc7 = InputMediaDocument(media=FSInputFile("statham.db"),
                                       caption=f'Бэкап <i>{datetime.datetime.now().date()}</i>')
-            await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5, doc6], chat_id=972753303)
+            await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5, doc6, doc7], chat_id=message.chat.id)
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! При отправке файлов для бэкапа\n{e}')
     async with ChatActionSender(bot=bot, chat_id=972753303):
@@ -2501,14 +2549,38 @@ async def post_public():
         votes = get_votes(num)
         if len(votes.keys()) == 0:
             continue
+        photo = get_photo_id_by_id(num)
+        if photo[:4] == 'http':
+            try:
+                response = requests.get(photo)
+                if response.status_code == 200:
+                    with open(f"public_photo.jpg", "wb") as file:
+                        file.write(response.content)
+            except Exception as e:
+                await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 4325\n{e}')
+        else:
+            f = await bot.get_file(photo)
+            await bot.download_file(f.file_path, f"public_photo.jpg")
+        colors = list(get_colors('public_photo.jpg'))
+        emoji_colors = colors[:5]
+        for j in emoji_colors:
+            if j[1] > 40:
+                emoji_colors = [color_names[j[0]]]
+                break
+        else:
+            emoji_colors = [color_names[j[0]] for j in emoji_colors if j[1] > 7]
+        c = search_emoji_by_colors(emoji_colors)
+        os.remove(f"public_photo.jpg")
+
+
         avg = sum(votes.values()) / len(votes.keys())
         avg_public = min(avg + 2, 10)
         avg_str_public = '{:.2f}'.format(avg_public)
         rounded_public = round(avg_public)
         note_str_origin = get_note_sql(num)
         note_str = f'<blockquote>{note_str_origin}</blockquote>\n' if note_str_origin else ''
-        txt2 = note_str + f'{random.choice(emoji_lol)} <a href="https://t.me/RatePhotosBot">Оценено</a> на <b>{avg_str_public}</b> из <b>10</b>' + f'\n<i>{rate3[rounded_public]}</i>'
-        await bot.send_photo(chat_id=channel_id_public, photo=get_photo_id_by_id(num), caption=txt2)
+        txt2 = note_str + f'{c} <a href="https://t.me/RatePhotosBot">Оценено</a> на <b>{avg_str_public}</b> из <b>10</b>' + f'\n<i>{rate3[rounded_public]}</i>'
+        await bot.send_photo(chat_id=channel_id_public, photo=photo, caption=txt2)
 
 
 async def notify():
@@ -2526,10 +2598,32 @@ async def notify():
 
 
 async def main():
+    try:
+        today = datetime.date.today()
+        for user in get_top_incels():
+            date = get_birthday(user)
+            birthdate = datetime.datetime.fromtimestamp(date).date()
+            birthday_this_year = birthdate.replace(year=today.year)
+            if birthday_this_year < today:
+                birthday_this_year = birthday_this_year.replace(year=today.year + 1)
+
+            days_until_birthday = (birthday_this_year - today).days
+
+            if days_until_birthday == 7 or days_until_birthday == 1:
+                for user_local in get_top_incels() - {user}:
+                    await bot.send_message(chat_id=user_local,
+                                           text=f'У инцела <b>@{get_username_by_id(user)}</b> скоро День Рождения ({birthdate.strftime("%d.%m.%Y")}), {["осталось", "остался"][days_until_birthday == 1]} {days_until_birthday} {["дней", "день"][days_until_birthday == 1]}!')
+            elif days_until_birthday == 0:
+
+                for user_local in get_top_incels() - {user}:
+                    await bot.send_message(chat_id=user_local,
+                                           text=f'У инцела <b>@{get_username_by_id(user)}</b> сегодня День Рождения! <b>Поздравь инцела!</b>\nМужику исполнилось <b>{today.year - birthdate.year}</b>!')
+    except Exception as e:
+        await bot.send_message(chat_id=972753303, text=f'Ошибка! Код 322\n{e}')
     scheduler: AsyncIOScheduler = AsyncIOScheduler(timezone=str(tzlocal.get_localzone()))
     scheduler.add_job(notify, trigger='cron', hour='9-22/6', minute=0)
     scheduler.add_job(post_public, 'cron', hour='*', minute=30)
-    scheduler.add_job(weekly_tierlist, trigger=CronTrigger(day_of_week='sun', hour=20, minute=0))
+    scheduler.add_job(weekly_tierlist, trigger=CronTrigger(day_of_week='sun', hour=20, minute=40))
 
     day_of_week_list = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
     for admin in get_admins():

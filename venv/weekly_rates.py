@@ -69,6 +69,11 @@ def delete_from_queue_public_info(num):
     cursor2.execute("UPDATE public_info SET queue=?", (queue,))
     conn2.commit()
 
+def public_queue():
+    cursor2.execute("SELECT * FROM public_info")
+    queue = cursor2.fetchone()
+    return len(queue[0].split(','))
+
 
 def clear_db():
     cursor.execute('DELETE FROM weekly;')

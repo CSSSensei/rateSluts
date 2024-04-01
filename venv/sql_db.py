@@ -11,6 +11,9 @@ cursor = conn.cursor()
 cursor.execute('''CREATE TABLE IF NOT EXISTS users_info 
                   (id INTEGER PRIMARY KEY, username TEXT, banned BOOl, verified BOOL, attempts INTEGER, photos_ids TEXT, current INT, queue TEXT, new_user BOOL)''')
 
+cursor.execute('''CREATE TABLE IF NOT EXISTS birthday 
+                  (id INTEGER PRIMARY KEY, birthdate DATE)''')
+
 
 
 def check_id(id: int, username: str) -> bool:
@@ -45,6 +48,30 @@ def check_new_user(id):
         conn.commit()
         return True
     return False
+
+
+def add_new_birthday(user_id, date: int):
+    cursor.execute("SELECT * FROM birthday WHERE id=?", (user_id,))
+    user_is_new = cursor.fetchone()
+    if user_is_new is None:
+        cursor.execute("INSERT INTO birthday (id, birthdate) VALUES (?, ?)", (user_id, date))
+        conn.commit()
+    else:
+        cursor.execute("UPDATE birthday SET birthdate=? WHERE id=?", (date, user_id))
+        conn.commit()
+
+
+def get_birthday(user_id):
+    cursor.execute("SELECT birthdate FROM birthday WHERE id=?", (user_id,))
+    date = cursor.fetchone()
+    if date:
+        return date[0]
+    return None
+
+def get_top_incels():
+    cursor.execute("SELECT id FROM users_info WHERE verified = True")
+    rows = cursor.fetchall()
+    return set(row[0] for row in rows) - {955289704}
 
 
 def add_to_queue(id, num):

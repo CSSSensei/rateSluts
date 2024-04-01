@@ -167,7 +167,7 @@ def get_large_last_incel():
     rows = cursor.fetchone()
     cursor.execute('''SELECT DISTINCT afk_times
                       FROM average
-                      ORDER BY overshoot DESC''')
+                      ORDER BY afk_times DESC''')
     second_largest_last_incel = cursor.fetchall()[int(0.25 * len(rows)) - 1][0]
     return second_largest_last_incel
 
@@ -302,8 +302,8 @@ def print_average():
 
 if __name__ == '__main__':
     # get_last()
-    #print_db()
-    print_average()
+    print_db()
+    #print_average()
     # cursor.execute("SELECT * FROM results")
     # rows = cursor.fetchall()
     # for row in rows:
