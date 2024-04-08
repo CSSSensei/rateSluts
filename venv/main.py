@@ -244,7 +244,7 @@ basic_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
 admin_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
     keyboard=[[statistics_button, quote_button], [edit_rate, resend], [settings_button]], resize_keyboard=True)
 not_incel_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
-    keyboard=[[statistics_button]], resize_keyboard=True)
+    keyboard=[[statistics_button]], resize_keyboard=True, input_field_placeholder='Жду фоточку 🥰')
 
 cancel_photo: KeyboardButton = KeyboardButton(
     text='Не отправлять фото')
@@ -301,9 +301,19 @@ async def urbanned(message: Message, state: FSMContext):
 
 
 def get_keyboard(user_id: int):
+    if user_id in get_users():
+        queue_len = len(get_queue(user_id))
+        input_field = 'Сейчас новых фоточек нет, но ты можешь кинуть свою 🥰'
+        if queue_len != 0:
+            input_field = f'В очереди {queue_len} 🚨 Оцени фотки! 😡'
     if user_id in get_admins():
+        admin_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
+            keyboard=[[statistics_button, quote_button], [edit_rate, resend], [settings_button]], resize_keyboard=True,
+            input_field_placeholder=input_field)
         return admin_keyboard
     elif user_id in get_users():
+        basic_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
+            keyboard=[[statistics_button, quote_button], [edit_rate, resend]], resize_keyboard=True, input_field_placeholder=input_field)
         return basic_keyboard
     if len(get_avgs_not_incel(user_id)) > 5:
         return not_incel_keyboard
@@ -422,6 +432,16 @@ async def test_something(message: Message):
             InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='Еще', callback_data='more1')]]))
     global cnt
     cnt += 1
+
+
+@dp.message(Command(commands='amogus'))
+async def amogus_command(message: Message):
+    await message.answer(text=random.choice(replicas['amogus']), reply_markup=get_keyboard(message.from_user.id))
+
+
+@dp.message(Command(commands='pepe'))
+async def pepe_command(message: Message):
+    await message.answer(text=random.choice(replicas['pepe']), reply_markup=get_keyboard(message.from_user.id))
 
 
 @dp.callback_query(F.data == 'more1')
@@ -799,7 +819,8 @@ def get_manage_photo(ids: Union[int, List], mode=1, back_ids=0, message_to_delet
     elif mode == 3:
         row1 = [InlineKeyboardButton(text='✅', callback_data=ManageSettings(action=1, photo_id=ids, back_ids=back_ids, message_to_delete=message_to_delete).pack()),
                 InlineKeyboardButton(text='📝🚫', callback_data=ManageSettings(action=2, photo_id=ids,back_ids=back_ids, message_to_delete=message_to_delete).pack()),
-                InlineKeyboardButton(text='✏️', callback_data=ManageSettings(action=3, photo_id=ids, back_ids=back_ids, message_to_delete=message_to_delete).pack())]
+                InlineKeyboardButton(text='✏️', callback_data=ManageSettings(action=3, photo_id=ids, back_ids=back_ids, message_to_delete=message_to_delete).pack()),
+                InlineKeyboardButton(text='🥷', callback_data=ManageSettings(action=9, photo_id=ids, back_ids=back_ids, message_to_delete=message_to_delete).pack())]
         array_buttons: list[list[InlineKeyboardButton]] = [row1, [InlineKeyboardButton(text='🔙',
                                                                                        callback_data=ManageSettings(
                                                                                            action=7, photo_id=ids,
@@ -836,6 +857,7 @@ def get_manage_photo(ids: Union[int, List], mode=1, back_ids=0, message_to_delet
         row1 = [InlineKeyboardButton(text='✅', callback_data=ManageSettings(action=1, photo_id=ids).pack()),
                 InlineKeyboardButton(text='📝🚫', callback_data=ManageSettings(action=2, photo_id=ids).pack()),
                 InlineKeyboardButton(text='✏️', callback_data=ManageSettings(action=3, photo_id=ids).pack()),
+                InlineKeyboardButton(text='🥷', callback_data=ManageSettings(action=9, photo_id=ids).pack()),
                 InlineKeyboardButton(text='🗑', callback_data=ManageSettings(action=4, photo_id=ids).pack())]
         array_buttons: list[list[InlineKeyboardButton]] = [row1]
         markup = InlineKeyboardMarkup(inline_keyboard=array_buttons)
@@ -1043,12 +1065,12 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
             await callback.message.edit_caption(
                 caption=f'Оцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{get_group_name(information[1][:information[1].find("?"):])}</a></b>',
                 reply_markup=get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
-                                                message_to_delete=callback_data.message_to_delete))
+                                                message_to_delete=callback_data.message_to_delete, delete=False))
         except Exception:
             await callback.message.edit_text(
                 text=f'Оцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{get_group_name(information[1][:information[1].find("?"):])}</a></b>',
                 reply_markup=get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
-                                                message_to_delete=callback_data.message_to_delete),
+                                                message_to_delete=callback_data.message_to_delete, delete=False),
                 disable_web_page_preview=True)
     elif action == 3:
         if callback.message.photo:
@@ -1119,6 +1141,22 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
         else:
             await callback.message.edit_text(text=caption, reply_markup=get_manage_photo(ids=id, message_to_delete=callback_data.message_to_delete, back_ids=back_ids), disable_web_page_preview=True)
         await state.clear()
+    elif action == 9:
+        information = get_group_photo_info(photo_id)
+        last_num = get_last()
+        add_photo_id(last_num + 1, information[3], f'👥 {information[1]}')
+        add_note(last_num + 1, '/anon')
+        try:
+            await callback.message.edit_caption(
+                caption=f'Фото не будет опубликовано\nОцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{get_group_name(information[1][:information[1].find("?"):])}</a></b>',
+                reply_markup=get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
+                                                message_to_delete=callback_data.message_to_delete, delete=False))
+        except Exception:
+            await callback.message.edit_text(
+                text=f'Фото не будет опубликовано\nОцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{get_group_name(information[1][:information[1].find("?"):])}</a></b>',
+                reply_markup=get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
+                                                message_to_delete=callback_data.message_to_delete, delete=False),
+                disable_web_page_preview=True)
 
 
 @dp.callback_query(GroupCallBack.filter())
@@ -1370,13 +1408,20 @@ async def send_incel_photo(callback: Union[CallbackQuery, None] = None, user_id:
 @dp.callback_query(RateCallBack.filter())
 async def filter_rates(callback: CallbackQuery,
                        callback_data: RateCallBack, state: FSMContext):
+    if not check_id(callback.from_user.id, callback.from_user.username)[0]:
+        await state.set_state(FSMFillForm.banned)
+        await callback.message.delete()
+        await callback.answer('Ты заблокирован!')
+        return
     num = callback_data.photo_id
     await callback.answer(text=rate[callback_data.r])
     mailing = callback_data.mailing
     votes = get_votes(num)
     photo_is_not_posted = True
     insert_last_rate(callback.from_user.id, num)
-    if mailing == 1 and len(votes.keys()) >= len(get_users()):
+    global incels
+    incels = get_users()
+    if mailing == 1 and {get_id_by_username(i) for i in votes.keys() if get_id_by_username(i) in incels} == incels:
         photo_is_not_posted = False  # индикатор, который отвечает за публикацию поста в канал (для того чтобы после изменения оценки пост не выложился еще раз)
     add_rate(num, callback.from_user.username, callback_data.r)
     delete_from_queue(callback.from_user.id, num)
@@ -1791,21 +1836,21 @@ async def backup_files(message: Message):
 async def god_mode(message: Message):
     if message.from_user.id == 972753303:
         set_admin(972753303)
-        await message.answer(text='С возвращением!', reply_markup=admin_keyboard)
+        await message.answer(text='С возвращением!', reply_markup=get_keyboard(972753303))
 
 
 @dp.message(Command(commands='chill_mode'), F.from_user.id.in_(get_users()))
 async def chill_mode_lol(message: Message):
     if message.from_user.id == 972753303:
         chill_mode(972753303)
-        await message.answer(text='Почилль, дружище!', reply_markup=admin_keyboard)
+        await message.answer(text='Почилль, дружище!', reply_markup=get_keyboard(972753303))
 
 
 @dp.message(Command(commands='default_mode'), F.from_user.id.in_(get_users()))
 async def default_mode_lol(message: Message):
     if message.from_user.id == 972753303:
         default_mode(972753303)
-        await message.answer(text='Включен режим модерации', reply_markup=admin_keyboard)
+        await message.answer(text='Включен режим модерации', reply_markup=get_keyboard(972753303))
 
 
 
@@ -1943,7 +1988,7 @@ async def send_statham_db(message: Message):
 
 @dp.message(Command(commands='getcoms'), F.from_user.id.in_(get_users()))
 async def get_all_commands(message: Message):
-    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/public_queue\n/getcoms\n/about'
+    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/public_queue\n/getcoms\n/amogus\n/pepe\n/about'
     await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
 
 
@@ -2266,7 +2311,7 @@ async def change_last_rate(message: Message, state: FSMContext):
 
 
 @dp.message(F.text == 'Настройки ⚙️', F.from_user.id.in_(get_users()))
-async def settings_button(message: Message):
+async def settings_button_func(message: Message):
     user_id = message.from_user.id
     if user_id not in get_admins():
         await message.answer(text='Извини, ты больше не админ, лох!', reply_markup=basic_keyboard)
@@ -2481,7 +2526,7 @@ async def weekly_tierlist(user=972753303):
             doc6 = InputMediaDocument(media=FSInputFile("emoji.db"))
             doc7 = InputMediaDocument(media=FSInputFile("statham.db"),
                                       caption=f'Бэкап <i>{datetime.datetime.now().date()}</i>')
-            await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5, doc6, doc7], chat_id=message.chat.id)
+            await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5, doc6, doc7], chat_id=972753303)
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! При отправке файлов для бэкапа\n{e}')
     async with ChatActionSender(bot=bot, chat_id=972753303):

@@ -288,8 +288,12 @@ def delete_row_in_average(user_id):
 def print_db():
     cursor.execute("SELECT * FROM sluts_info")
     rows = cursor.fetchall()
+    cnt = 0
     for row in rows:
         print(row)
+        cnt+=1
+        if cnt == 100:
+            break
 
 
 def print_average():
