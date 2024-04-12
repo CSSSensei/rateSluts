@@ -1,12 +1,13 @@
 import sqlite3
-
+import imagehash
+from PIL import Image
 conn = sqlite3.connect('weekly.db')
 cursor = conn.cursor()
 conn2 = sqlite3.connect('weekly_info.db')
 cursor2 = conn2.cursor()
 
 cursor.execute('''CREATE TABLE IF NOT EXISTS weekly
-                  (photo_id TEXT PRIMARY KEY, average FLOAT)''')
+                  (photo_id TEXT PRIMARY KEY, average FLOAT, hash TEXT)''')
 
 cursor2.execute('''CREATE TABLE IF NOT EXISTS if_send
                   (id INT PRIMARY KEY, weekly_sending BOOl)''')
@@ -24,9 +25,8 @@ else:
                   (queue TEXT)''')
 
 
-
-def add_to_weekly(id, avg):
-    cursor.execute("INSERT INTO weekly (photo_id, average) VALUES (?, ?)", (id, avg))
+def add_to_weekly(id, avg, hash=None):
+    cursor.execute("INSERT INTO weekly (photo_id, average, hash) VALUES (?, ?, ?)", (id, avg, hash))
     conn.commit()
 
 
@@ -142,6 +142,37 @@ def weekly_resume(id):
     else:
         cursor2.execute("INSERT INTO if_send (id, weekly_sending) VALUES (?, ?)", (id, True))
     conn2.commit()
+
+
+def percentage_difference(image1, image2):
+    hash1 = imagehash.average_hash(Image.open(image1), hash_size=8)
+    hash2 = imagehash.average_hash(Image.open(image2), hash_size=8)
+    diff = hash1 - hash2
+    max_bits = hash1.hash.size ** 2
+    percent_diff = (diff / hash1.hash.size) * 100
+    return percent_diff
+
+
+def get_hash(image_path):
+    hash = imagehash.average_hash(Image.open(image_path), hash_size=8)
+    return str(hash)
+
+
+def hash_similar(hash1, hash2, threshold=0.03):
+    hash1, hash2 = imagehash.hex_to_hash(hash1), imagehash.hex_to_hash(hash2)
+    diff = hash1 - hash2
+    percent_diff = (diff / hash1.hash.size)
+    return percent_diff <= threshold
+
+
+def get_similarities(hash):
+    for row in cursor.execute('SELECT photo_id, hash FROM weekly'):
+        link, hash_str = row
+        if hash_str is None:
+            continue
+        if hash_similar(hash_str, hash, threshold=0.05):
+            return True
+    return False
 
 
 def print_db(n=2):

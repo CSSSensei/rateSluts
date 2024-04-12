@@ -291,9 +291,6 @@ def print_db():
     cnt = 0
     for row in rows:
         print(row)
-        cnt+=1
-        if cnt == 100:
-            break
 
 
 def print_average():
