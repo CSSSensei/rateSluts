@@ -55,10 +55,9 @@ def add_new_birthday(user_id, date: int):
     user_is_new = cursor.fetchone()
     if user_is_new is None:
         cursor.execute("INSERT INTO birthday (id, birthdate) VALUES (?, ?)", (user_id, date))
-        conn.commit()
     else:
         cursor.execute("UPDATE birthday SET birthdate=? WHERE id=?", (date, user_id))
-        conn.commit()
+    conn.commit()
 
 
 def get_birthday(user_id):
@@ -145,11 +144,10 @@ def set_verified(id: int):
     if not rows:
         cursor.execute("INSERT INTO users_info (id, verified, current, banned) VALUES (?, ?, ?, ?)",
                        (id, True, 0, False))
-        conn.commit()
     else:
         cursor.execute("UPDATE users_info SET verified=?, banned=?, current=? WHERE id=?",
                        (True, False, 0, id))
-        conn.commit()
+    conn.commit()
 
 
 def get_users() -> set:
@@ -189,6 +187,7 @@ def get_last_rate(id):
 def add_current_state(id, num, username=0):
     if username == 0:
         cursor.execute("UPDATE users_info SET current=? WHERE id=?", (num, id,))
+        conn.commit()
         return
     cursor.execute("UPDATE users_info SET current=?, username=? WHERE id=?", (num, username, id,))
     conn.commit()

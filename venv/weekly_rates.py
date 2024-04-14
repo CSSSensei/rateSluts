@@ -26,7 +26,17 @@ else:
 
 
 def add_to_weekly(id, avg, hash=None):
-    cursor.execute("INSERT INTO weekly (photo_id, average, hash) VALUES (?, ?, ?)", (id, avg, hash))
+    cursor.execute("SELECT * FROM weekly WHERE photo_id = ?", (id,))
+    existing_row = cursor.fetchone()
+
+    if existing_row:
+        if hash:
+            cursor.execute("UPDATE weekly SET average = ?, hash = ? WHERE photo_id = ?", (avg, hash, id))
+        else:
+            cursor.execute("UPDATE weekly SET average = ? WHERE photo_id = ?", (avg, id))
+    else:
+        cursor.execute("INSERT INTO weekly (photo_id, average, hash) VALUES (?, ?, ?)", (id, avg, hash))
+
     conn.commit()
 
 
@@ -81,7 +91,7 @@ def clear_db():
 
 
 def get_weekly_db():
-    cursor.execute("SELECT * FROM weekly")
+    cursor.execute("SELECT * FROM weekly WHERE average IS NOT NULL")
     rows = cursor.fetchall()
     result = {}
     for row in rows:
@@ -189,7 +199,7 @@ def print_db(n=2):
 
 
 if __name__ == '__main__':
-    # print_db(0)
-    cursor2.execute("SELECT * FROM public_info")
-    queue = cursor2.fetchone()
-    print(len(queue[0].split(',')), queue)
+    print_db(0)
+    # cursor2.execute("SELECT * FROM public_info")
+    # queue = cursor2.fetchone()
+    # print(len(queue[0].split(',')), queue)
