@@ -24,23 +24,26 @@ def get_statistics(username):
         votes.append(list(g.values())[0])
         averages.append(sum(g.values()) / len(g.keys()))
 
-    averages = averages[-200:]
     colors = [color_calculate(avg) for avg in averages]
     # Создаем столбчатую диаграмму с разноцветными столбцами
     if len(averages) >= 100:
         plt.figure(figsize=(6 * len(averages) / 100, 5))
     plt.bar(range(len(averages)), averages, color=colors, width=1)
     plt.title(f'@{username}')
-    plt.xlabel('Record Number')
-    plt.ylabel('Average')
-    plt.savefig(f'myplot_{username}.png')
+    plt.yticks([i for i in range(12)])
+    plt.yticks([i - 0.5 for i in range(12)], minor=True)
+    plt.xlabel('Номер фотки')
+    plt.ylabel('Оценка')
     # Закрываем соединение с базой данных
     plt.clf()
 
     plt.plot(averages)
     plt.title(f'@{username}')
-    plt.xlabel('Record Number')
-    plt.ylabel('Average')
+
+    plt.yticks([i for i in range(12)])
+    plt.yticks([i - 0.5 for i in range(12)], minor=True)
+    plt.xlabel('Номер фотки')
+    plt.ylabel('Оценка')
     plt.savefig(f'myplot_{username}2.png')
     plt.clf()
 
@@ -69,16 +72,20 @@ def get_statistics_not_incel(user_id):
 
     plt.bar(range(len(averages)), averages, color=colors, width=1)
     plt.title(username)
-    plt.xlabel('Record Number')
-    plt.ylabel('Average')
+    plt.yticks([i for i in range(12)])
+    plt.yticks([i - 0.5 for i in range(12)], minor=True)
+    plt.xlabel('№ фотки')
+    plt.ylabel('Оценка')
     plt.savefig(f'myplot_{user_id}.png')
     # Закрываем соединение с базой данных
     plt.clf()
 
     plt.plot(averages)
     plt.title(username)
-    plt.xlabel('Record Number')
-    plt.ylabel('Average')
+    plt.yticks([i for i in range(12)])
+    plt.yticks([i - 0.5 for i in range(12)], minor=True)
+    plt.xlabel('№ фотки')
+    plt.ylabel('Оценка')
     plt.savefig(f'myplot_{user_id}2.png')
     plt.clf()
 

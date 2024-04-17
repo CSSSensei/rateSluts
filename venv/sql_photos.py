@@ -2,6 +2,7 @@ import datetime
 import sqlite3
 import json
 from typing import Dict
+from sql_db import get_username_by_id
 
 conn = sqlite3.connect('slutsDB.db')
 cursor = conn.cursor()
@@ -219,6 +220,16 @@ def add_rate(num, username, rate):
     votes = json.dumps(votes)
     cursor.execute("UPDATE sluts_info SET votes=? WHERE id=?", (votes, num,))
     conn.commit()
+
+
+def get_rate(num, user_id):
+    username = get_username_by_id(user_id)
+    cursor.execute("SELECT votes FROM sluts_info WHERE id=?", (num,))
+    votes_rows = cursor.fetchone()[0]
+    votes = {} if votes_rows is None else json.loads(votes_rows)
+    if len(votes) == 0 or username not in votes:
+        return 0
+    return votes[username]
 
 
 def add_note(num, note):

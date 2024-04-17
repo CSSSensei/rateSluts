@@ -75,6 +75,7 @@ from statham import get_randQuote, insert_quote, get_statham_db, del_quote
 from administrators import *
 from parser import *
 from cv_color import *
+from watermark import *
 
 load_dotenv(find_dotenv())
 
@@ -443,6 +444,17 @@ async def pepe_command(message: Message):
     await message.answer(text=random.choice(replicas['pepe']), reply_markup=get_keyboard(message.from_user.id))
 
 
+@dp.message(Command(commands='phasalov'))
+async def phasalov_command(message: Message):
+    n = random.randint(1, 100)
+    txt = (f"```C\nfor (int i = 0; i < k; i++) {'{'}\n"
+           f"    if (n == {n}) {'{'}\n"
+           f"        n = {n};\n"
+           f"    {'}'}\n"
+           f"{'}'}```")
+    await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id), parse_mode="MarkdownV2")
+
+
 @dp.callback_query(F.data == 'more1')
 async def more1(callback: CallbackQuery):
     global cnt
@@ -582,7 +594,7 @@ def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_
 async def send_results(num: int, rate: str):
     origin = get_origin(num)
     origin_id = check_user(origin)
-    if origin_id not in get_users():
+    if origin_id and origin_id not in get_users():
         add_not_incel_photo(num, get_photo_id_by_id(num), origin_id, float(rate))
         if origin_id is not None:
             if float(rate) <= 5:
@@ -629,22 +641,24 @@ async def send_group_photo(user_id: int, num: str):
 
 async def already_in_db(path):
     try:
+        rand_int = random.randint(1, 10 ** 8)
+        saved_path = f"public_photo{rand_int}.jpg"
         if path[:4] == 'http':
             response = requests.get(path)
             if response.status_code == 200:
-                with open(f"public_photo.jpg", "wb") as file:
+                with open(saved_path, "wb") as file:
                     file.write(response.content)
-            hash = get_hash('public_photo.jpg')
-            os.remove('public_photo.jpg')
+            hash = get_hash(saved_path)
+            os.remove(saved_path)
             if get_similarities(hash):
                 return True
             return False
         else:
             f = await bot.get_file(path)
             f_path = f.file_path
-            await bot.download_file(f_path, "public_photo.jpg")
-            hash = get_hash('public_photo.jpg')
-            os.remove('public_photo.jpg')
+            await bot.download_file(f_path, saved_path)
+            hash = get_hash(saved_path)
+            os.remove(saved_path)
             if get_similarities(hash):
                 return True
             return False
@@ -663,6 +677,7 @@ async def notify_admin(user_id: int, message_id=0):
                                                caption=f'Начал поиск фото по группам\n<code>{"0".rjust(len(str(len(groups_set))))} из {len(groups_set)}</code>  | <code>{("{:2.2f}".format(00.00) + "%").rjust(6)}</code>')
         cnt_group = 0
         cnt = 0
+        skipped = 0
         for group in groups_set:
             group_sets = get_group_sets(group)
             if message_id != 0:
@@ -688,16 +703,19 @@ async def notify_admin(user_id: int, message_id=0):
                     if len(post[0]) == 1:
                         num = last_group_photo_id() + 1
                         if sets[7] != 2:
+                            if await already_in_db(post[0][0]):
+                                skipped += 1
+                                continue
+                            else:
+                                await download_hash(link=post[0][0])
                             add_group_photo(num, f"{group_sets[1]}?w=wall{link}",
                                             format_text(post[1], group_sets[1], link), post[0][0])
-                            if cnt == 1:
+                            if cnt - 1 == skipped:
                                 await send_group_photo(user_id, str(num))
                             else:
                                 add_to_queue_group_photo(user_id, str(num))
                         else:
                             extra2 = ''
-                            if await already_in_db(post[0][0]):
-                                extra2 = '⛔️ <b>Фото уже в БД</b> ⛔️️'
                             await bot.send_photo(chat_id=user_id, photo=post[0][0],
                                                  caption=extra2 + '\n' + format_text(post[1], group_sets[1], link) + (
                                                      "\n\n" if len(post[1]) > 0 else "") + caption,
@@ -708,21 +726,26 @@ async def notify_admin(user_id: int, message_id=0):
                         first = True
                         num = last_group_photo_id()
                         for url in post[0]:
+                            if await already_in_db(url):
+                                continue
+                            await download_hash(link=url)
                             num += 1
                             if sets[7] != 2:
                                 add_group_photo(num, f"{group_sets[1]}?w=wall{link}",
                                                 format_text(post[1], group_sets[1], link), url)
                             photo_ids.append(num)
                             if first and sets[7] == 2:
-                                media.append(
-                                    InputMediaPhoto(media=url, caption=format_text(post[1], group_sets[1], link) + (
-                                        "\n\n" if len(post[1]) > 1 else "") + caption))
+                                media.append(InputMediaPhoto(media=url, caption=format_text(post[1], group_sets[1], link) + (
+                                    "\n\n" if len(post[1]) > 1 else "") + caption))
                                 first = False
                             else:
                                 media.append(InputMediaPhoto(media=url))
                         try:
                             if sets[7] == 1:
-                                if cnt == 1:
+                                if len(media) == 0:
+                                    skipped += 1
+                                    continue
+                                if cnt - 1 == skipped:
                                     await send_group_photo(user_id, f'{photo_ids[0]}-{photo_ids[-1]}')
                                 else:
                                     add_to_queue_group_photo(user_id, f'{photo_ids[0]}-{photo_ids[-1]}')
@@ -732,7 +755,7 @@ async def notify_admin(user_id: int, message_id=0):
                         except Exception as e:
                             await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 3\n{e}')
             update_time(group)
-        if cnt == 0:
+        if cnt == skipped:
             if len(get_admins_queue(user_id)) == 0:
                 await bot.send_message(chat_id=user_id, text=f'Фото с текущими фильтрами не нашлось 😨')
             else:
@@ -876,7 +899,7 @@ def get_manage_photo(ids: Union[int, List], mode=1, back_ids=0, message_to_delet
             elif len(rows[-1]) == 3:
                 rows[-1] = rows[-2][-1:] + rows[-1]
                 rows[-2] = rows[-2][:-1]
-        rows.append([InlineKeyboardButton(text='Расхуярить',
+        rows.append([InlineKeyboardButton(text='Расхуярить!',
                                           callback_data=ManageSettings(action=10, photo_id=f'{min(ids)}, {max(ids)}',
                                                                        message_to_delete=message_to_delete).pack()),
                      InlineKeyboardButton(text='🗑',
@@ -1017,8 +1040,9 @@ async def moderate_main_settings(callback: CallbackQuery, callback_data: AdminCa
                                              reply_markup=get_group_keyboard(groups_id=None))
         else:
             mes_id = await bot.send_photo(chat_id=callback.from_user.id, photo='https://i.postimg.cc/TYv4PFJP/drawing-kitten-animals-9-Favim-1.jpg', caption=f'Начал поиск фото по группам')
-            await notify_admin(callback.from_user.id, message_id=mes_id.message_id)
             await callback.answer()
+            await notify_admin(callback.from_user.id, message_id=mes_id.message_id)
+
 
     elif action == 4:
         await callback.message.edit_text(text='Скинь ссылку на стену группы вк, из которой ты хочешь получать фото', reply_markup=get_admin_keyboard(callback.from_user.id, cancel_url_sending=True))
@@ -1044,14 +1068,11 @@ async def send_next_photo(user_id: int):
     i = min(queue)
     remove_from_admins_queue(user_id, i)
     try:
-        extra = '' if len(queue) == 1 else f' | {len(queue) - 1} в очереди'
+        extra = '' if len(queue) == 0 else f' | {len(queue)} в очереди'
         if '-' not in i:
             async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
                 photo = send_photos_by_id(int(i))
-                extra2 = ''
-                if await already_in_db(photo[3]):
-                    extra2 = '⛔️ <b>Фото уже в БД</b> ⛔️️'
-                caption = f'{extra2}\n👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
+                caption = f'👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
                 msg = await bot.send_photo(chat_id=user_id, photo=photo[3],
                                            caption=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
                                            reply_markup=get_manage_photo(ids=int(i)))
@@ -1130,10 +1151,7 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 5\n{e}')
     elif action == 5:
-        extra2 = ''
-        if await already_in_db(get_group_photo_info(photo_id)[3]):
-            extra2 = '⛔️ <b>Фото уже в БД</b> ⛔️️'
-        await callback.message.edit_text(text=f'{extra2}\nВыбери действие для выбранного фото',
+        await callback.message.edit_text(text=f'Выбери действие для выбранного фото',
                                          reply_markup=get_manage_photo(photo_id, mode=3, back_ids=callback_data.back_ids,
                                                                        message_to_delete=callback_data.message_to_delete))
     elif action == 6:
@@ -1156,7 +1174,7 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
         ids_list = [i for i in range(first, last + 1)]
         info = get_group_photo_info(first)
         queue = get_admins_queue(callback.from_user.id)
-        extra = f' | {len(queue)} в очереди'
+        extra = f' | {len(queue) + 1} в очереди'
         txt = '' if info[2] is None else info[2]
         caption = f'{txt}\n\n👥 <b><a href="vk.com/{info[1]}">{get_group_name(info[1][:info[1].find("?")])}</a></b>' + extra
         await callback.message.edit_text(text=caption,
@@ -1171,7 +1189,7 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
         else:
             id = photo_id
         queue = get_admins_queue(callback.from_user.id)
-        extra = f' | {len(queue)} в очереди'
+        extra = f' | {len(queue) + 1} в очереди'
         photo = send_photos_by_id(int(photo_id))
         txt = '' if photo[2] is None else photo[2]
         caption = f'{txt}\n\n👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
@@ -1206,16 +1224,18 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
         set_message_to_delete(callback.from_user.id, callback.message.message_id)
     elif action == 11:
         await callback.answer('Фотки будут высланы по отдельности')
+        messages_to_delete = get_message_to_delete(callback.from_user.id)
+        min_photo = int(photo_id.split(',')[0])
+        max_photo = int(photo_id.split(',')[1])
+        for i in range(min_photo, max_photo + 1):
+            add_to_queue_group_photo(callback.from_user.id, str(i))
         await send_next_photo(callback.from_user.id)
         await callback.message.delete()
         msgs = list(map(int, callback_data.message_to_delete.split(',')))
         msgs_list = [i for i in range(msgs[0], msgs[-1] + 1)]
         await bot.delete_messages(chat_id=callback.from_user.id, message_ids=msgs_list)
-        await bot.delete_message(chat_id=callback.from_user.id, message_id=get_message_to_delete(callback.from_user.id))
-        min_photo = int(photo_id.split(',')[0])
-        max_photo = int(photo_id.split(',')[1])
-        for i in range(min_photo, max_photo + 1):
-            add_to_queue_group_photo(callback.from_user.id, str(i))
+        await bot.delete_message(chat_id=callback.from_user.id, message_id=messages_to_delete)
+
 
     elif action == 12:
         await callback.answer('Пьяница, блядь, можешь по кнопкам попадать?')
@@ -1470,24 +1490,28 @@ async def send_incel_photo(callback: Union[CallbackQuery, None] = None, user_id:
                 delete_from_queue(user_id, num)
 
 
-async def download_hash(num):
-    value = get_photo_id_by_id(num)
+async def download_hash(num=1, link=None):
+    path = f"image_{random.randint(1, 10 ** 8)}.jpg"
+    if link:
+        value = link
+    else:
+        value = get_photo_id_by_id(num)
     if value[:4] == 'http':
         try:
             response = requests.get(value)
             if response.status_code == 200:
-                with open("image_N.jpg", "wb") as file:
+                with open(path, "wb") as file:
                     file.write(response.content)
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 6666\n{e}')
     else:
         f = await bot.get_file(value)
         f_path = f.file_path
-        await bot.download_file(f_path, "image_N.jpg")
+        await bot.download_file(f_path, path)
     try:
-        hash = get_hash("image_N.jpg")
+        hash = get_hash(path)
         add_to_weekly(value, None, hash)
-        os.remove("image_N.jpg")
+        os.remove(path)
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 7777\n{e}')
 
@@ -1501,8 +1525,11 @@ async def filter_rates(callback: CallbackQuery,
         await callback.answer('Ты заблокирован!')
         return
     num = callback_data.photo_id
-    await callback.answer(text=rate[callback_data.r])
     mailing = callback_data.mailing
+    if mailing == 2:
+        last_rate = get_rate(num, callback.from_user.id)
+    else:
+        await callback.answer(text=rate[callback_data.r])
     votes = get_votes(num)
     photo_is_not_posted = True
     insert_last_rate(callback.from_user.id, num)
@@ -1563,8 +1590,6 @@ async def filter_rates(callback: CallbackQuery,
                 except Exception:
                     add_to_weekly(photo_id, avg)
                 avg_str = '{:.2f}'.format(avg)
-                avg_str_public = '{:.2f}'.format(min(avg + 2 + random.uniform(-0.3, 0.3), 10))
-                await send_results(num, avg_str_public)
                 extra = ''
                 spoiler = False
                 if avg == 0:
@@ -1598,13 +1623,17 @@ async def filter_rates(callback: CallbackQuery,
         await send_incel_photo(callback=callback)
         return
     elif mailing == 2:
+        if last_rate != callback_data.r:
+            add_overshoot(callback.from_user.id)
+        else:
+            await callback.answer('🤨 В сохраненки кинул, онанист чёртов???')
         await callback.message.delete()
         return
     elif mailing == 3:
+        previous = get_message_to_delete(callback.from_user.id)
         await send_next_photo(callback.from_user.id)
         await callback.message.delete()
         await send_photo_to_users(callback.from_user.id, num)
-        previous = get_message_to_delete(callback.from_user.id)
         if '-' in previous:
             previous = list(map(int, previous.split('-')))
             msgs_list = [i for i in range(previous[0], previous[-1] + 1)]
@@ -2033,12 +2062,16 @@ async def get_queue_rates(message: Message):
     db_incel = sorted(db_incel, key=lambda x: len(x[-2].split(',')) if x[-2] else 0, reverse=True)
 
     for incel_loc in db_incel:
+        admin_str = ''
+        if incel_loc[0] in get_admins():
+            admin_queue_len = len(get_admins_queue(incel_loc[0]))
+            admin_str = f'{"" if admin_queue_len == 0 else f" / <b>{admin_queue_len}</b>"}'
         if incel_loc[-2] is None:
             queue = '✅'
         else:
             queue = f"В очереди <b>{len(incel_loc[-2].split(','))}</b>"
             cnt += 1
-        line = f'<code>@{incel_loc[1].ljust(mx_len_username)}</code> | {queue}\n'
+        line = f'<code>@{incel_loc[1].ljust(mx_len_username)}</code> | {queue}{admin_str}\n'
         txt += line
     txt += f'<blockquote>Итого ублюдков: <b>{cnt}</b></blockquote>'
     await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
@@ -2412,7 +2445,6 @@ async def change_last_rate(message: Message, state: FSMContext):
     if last_rate == 0 or last_rate == 5:
         await message.answer(text='Ты не оценивал чужих фото!')
         return
-    add_overshoot(message.from_user.id)
     async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
         await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(last_rate),
                              reply_markup=get_rates_keyboard(last_rate, 2), caption='Ну давай, переобуйся, тварь!')
@@ -2699,43 +2731,49 @@ async def weekly_tierlist(user=972753303):
 
 async def post_public():
     for i in range(random.randint(1, 3)):
-        num = get_min_from_public_info()
-        delete_from_queue_public_info(num)
-        votes = get_votes(num)
-        if len(votes.keys()) == 0:
-            continue
-        photo = get_photo_id_by_id(num)
-        if photo[:4] == 'http':
-            try:
-                response = requests.get(photo)
-                if response.status_code == 200:
-                    with open(f"public_photo.jpg", "wb") as file:
-                        file.write(response.content)
-            except Exception as e:
-                await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 4325\n{e}')
-        else:
-            f = await bot.get_file(photo)
-            await bot.download_file(f.file_path, f"public_photo.jpg")
-        colors = list(get_colors('public_photo.jpg'))
-        emoji_colors = colors[:5]
-        for j in emoji_colors:
-            if j[1] > 40:
-                emoji_colors = [color_names[j[0]]]
-                break
-        else:
-            emoji_colors = [color_names[j[0]] for j in emoji_colors if j[1] > 7]
-        c = search_emoji_by_colors(emoji_colors)
-        os.remove(f"public_photo.jpg")
-
-
-        avg = sum(votes.values()) / len(votes.keys())
-        avg_public = min(avg + 2, 10)
-        avg_str_public = '{:.2f}'.format(avg_public)
-        rounded_public = round(avg_public)
-        note_str_origin = get_note_sql(num)
-        note_str = f'<blockquote>{note_str_origin}</blockquote>\n' if note_str_origin else ''
-        txt2 = note_str + f'{c} <a href="https://t.me/RatePhotosBot">Оценено</a> на <b>{avg_str_public}</b> из <b>10</b>' + f'\n<i>{rate3[rounded_public]}</i>'
-        await bot.send_photo(chat_id=channel_id_public, photo=photo, caption=txt2)
+        try:
+            num = get_min_from_public_info()
+            delete_from_queue_public_info(num)
+            votes = get_votes(num)
+            if len(votes.keys()) == 0:
+                continue
+            photo = get_photo_id_by_id(num)
+            hash = get_hash_from_db(photo)
+            rand_int = random.randint(1, 10 ** 8)
+            path = f"public_photo{rand_int}.jpg"
+            if photo[:4] == 'http':
+                try:
+                    response = requests.get(photo)
+                    if response.status_code == 200:
+                        with open(path, "wb") as file:
+                            file.write(response.content)
+                except Exception as e:
+                    await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 4325\n{e}')
+            else:
+                f = await bot.get_file(photo)
+                await bot.download_file(f.file_path, path)
+            colors = list(get_colors(path))
+            emoji_colors = colors[:5]
+            for j in emoji_colors:
+                if j[1] > 40:
+                    emoji_colors = [color_names[j[0]]]
+                    break
+            else:
+                emoji_colors = [color_names[j[0]] for j in emoji_colors if j[1] > 7]
+            c = search_emoji_by_colors(emoji_colors)
+            avg = sum(votes.values()) / len(votes.keys())
+            avg = min(avg + 2 + random.uniform(-0.2, 0.2), 10)
+            avg_str_public = '{:.2f}'.format(avg)
+            rounded_public = round(avg)
+            await send_results(num, avg_str_public)
+            watermark(path, avg_str_public, hash)
+            note_str_origin = get_note_sql(num)
+            note_str = f'<blockquote>{note_str_origin}</blockquote>\n' if note_str_origin else ''
+            txt2 = note_str + f'{c} <a href="https://t.me/RatePhotosBot">Оценено</a> на <b>{avg_str_public}</b> из <b>10</b>' + f'\n<i>{rate3[rounded_public]}</i>'
+            await bot.send_photo(chat_id=channel_id_public, photo=FSInputFile(path), caption=txt2)
+            os.remove(path)
+        except Exception as e:
+            await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 1100\n{e}')
 
 
 async def notify():

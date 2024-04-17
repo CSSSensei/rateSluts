@@ -48,6 +48,12 @@ def get_min_from_public_info():
     return min(set(map(int, queue[0].split(','))))
 
 
+def get_hash_from_db(photo_id):
+    cursor.execute("SELECT hash FROM weekly WHERE photo_id = ?", (photo_id,))
+    existing_row = cursor.fetchone()
+    return existing_row[0]
+
+
 def add_to_queue_public_info(num):
     cursor2.execute("SELECT queue FROM public_info")
     queue = cursor2.fetchone()
