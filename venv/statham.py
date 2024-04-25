@@ -1,8 +1,9 @@
 import sqlite3
 import random
 from typing import Tuple
+from db_paths import db_paths
 
-conn = sqlite3.connect('statham.db')
+conn = sqlite3.connect(db_paths['statham'])
 cursor = conn.cursor()
 
 cursor.execute('''CREATE TABLE IF NOT EXISTS statham_quotes

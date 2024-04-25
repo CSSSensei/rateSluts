@@ -116,13 +116,13 @@ def draw_tier_list(rates: dict, offset: int = 0):
 
     # Сохранение тирлиста в файл
     offset = offset if offset != 0 else ''
-    file_path = f'tier_list{offset}.png'
+    file_path = f'pictures/tier_list{offset}.png'
     thumbnails.save(file_path)
 
     max_file_size_for_telegram = 49
     required = max_file_size_for_telegram * 2 ** 20
     file_size = os.path.getsize(file_path)
-    file_path_comp = f'tier_list_compressed{offset}.png'
+    file_path_comp = f'pictures/tier_list_compressed{offset}.png'
     if file_size > required:
         ratio = required / file_size
         image = Image.open(file_path)

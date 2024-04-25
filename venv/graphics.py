@@ -1,16 +1,26 @@
-import sqlite3
 import json
+import os
 import matplotlib.pyplot as plt
 from Color2 import color_calculate
 from matplotlib.animation import FuncAnimation
 from sql_db import get_username_by_id
+import asyncio
+import aiohttp
+import aiosqlite
+from db_paths import db_paths
 
-conn = sqlite3.connect('slutsDB.db')
-cursor = conn.cursor()
-def get_statistics(username):
+db = db_paths['sluts']
 
-    cursor.execute(f"SELECT * FROM sluts_info WHERE origin = '{username}'")
-    rows = cursor.fetchall()
+async def get_async_connection():
+    async_connection = await aiosqlite.connect(db)
+    return async_connection
+
+
+async def get_statistics(username):
+    async_connection = await get_async_connection()
+    async with async_connection.cursor() as cursor:
+        await cursor.execute(f"SELECT * FROM sluts_info WHERE origin = '{username}'")
+        rows = await cursor.fetchall()
 
     # Создаем списки для хранения данных
     votes = []
@@ -34,25 +44,27 @@ def get_statistics(username):
     plt.yticks([i - 0.5 for i in range(12)], minor=True)
     plt.xlabel('Номер фотки')
     plt.ylabel('Оценка')
-    # Закрываем соединение с базой данных
+    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{username}.png')
     plt.clf()
+    #
+    # plt.plot(averages)
+    # plt.title(f'@{username}')
+    #
+    # plt.yticks([i for i in range(12)])
+    # plt.yticks([i - 0.5 for i in range(12)], minor=True)
+    # plt.xlabel('Номер фотки')
+    # plt.ylabel('Оценка')
+    # plt.savefig(f'pictures/myplot_{username}2.png')
+    # plt.clf()
 
-    plt.plot(averages)
-    plt.title(f'@{username}')
-
-    plt.yticks([i for i in range(12)])
-    plt.yticks([i - 0.5 for i in range(12)], minor=True)
-    plt.xlabel('Номер фотки')
-    plt.ylabel('Оценка')
-    plt.savefig(f'myplot_{username}2.png')
-    plt.clf()
 
 
-
-def get_statistics_not_incel(user_id):
-    username = get_username_by_id(user_id)
-    cursor.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
-    rows = cursor.fetchall()
+async def get_statistics_not_incel(user_id):
+    username = await get_username_by_id(user_id)
+    async_connection = await get_async_connection()
+    async with async_connection.cursor() as cursor:
+        await cursor.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
+        rows = await cursor.fetchall()
 
     # Создаем списки для хранения данных
     votes = []
@@ -76,7 +88,7 @@ def get_statistics_not_incel(user_id):
     plt.yticks([i - 0.5 for i in range(12)], minor=True)
     plt.xlabel('№ фотки')
     plt.ylabel('Оценка')
-    plt.savefig(f'myplot_{user_id}.png')
+    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}.png')
     # Закрываем соединение с базой данных
     plt.clf()
 
@@ -86,7 +98,7 @@ def get_statistics_not_incel(user_id):
     plt.yticks([i - 0.5 for i in range(12)], minor=True)
     plt.xlabel('№ фотки')
     plt.ylabel('Оценка')
-    plt.savefig(f'myplot_{user_id}2.png')
+    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}2.png')
     plt.clf()
 
 
@@ -100,7 +112,7 @@ def new_func(username, averages):
     plt.xlabel('Record Number')
     plt.ylabel('Average Rating')
 
-    plt.savefig(f'myplot_{username}_scatter.png')
+    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{username}_scatter.png')
     plt.clf()
     #
 
@@ -112,7 +124,7 @@ def new_func(username, averages):
     plt.pie(sizes, explode=explode, labels=labels, colors=colors, autopct='%1.1f%%', shadow=True, startangle=90)
     plt.title('Sentiment Analysis')
 
-    plt.savefig(f'myplot_{username}_pie.png')
+    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{username}_pie.png')
     plt.clf()
 
 
@@ -139,7 +151,7 @@ def new_func(username, averages):
     anim = FuncAnimation(fig, update, frames=len(averages), interval=200)
 
     # Сохраняем анимацию в файл
-    anim.save(f'myplot_{username}_animation.gif', writer='imagemagick')
+    anim.save(f'{os.path.dirname(__file__)}/pictures/myplot_{username}_animation.gif', writer='imagemagick')
 
 
 

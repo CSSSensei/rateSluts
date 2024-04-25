@@ -29,144 +29,9 @@
 #                        | |
 #                        |_|
 
-import asyncio
-import calendar
-import datetime
-import io
-import json
-import os
-import time
-import shutil
+from config import *
 
-import aiogram.utils.chat_action
-import yadisk
-
-import requests
-import random
-from typing import List, Dict, Union
-from pathlib import Path
-
-import tzlocal
-from aiogram import Bot, Dispatcher, F
-from aiogram.filters import Command, CommandStart, StateFilter, BaseFilter
-from aiogram.filters.callback_data import CallbackData
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import FSInputFile, InputMediaPhoto, InputMediaDocument, InputMediaVideo
-from aiogram.types import (KeyboardButton, Message, ReplyKeyboardMarkup,
-                           ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ContentType,
-                           MessageReactionUpdated)
-from aiogram.utils.chat_action import ChatActionSender
-from aiogram.types.reaction_type_emoji import ReactionTypeEmoji
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from dotenv import load_dotenv, find_dotenv
-from aiogram.client.session.aiohttp import AiohttpSession
-from sql_db import check_id, reduce_attempts, set_verified, add_girlphoto, get_users, get_last_commit, \
-    add_current_state, get_current_state, add_to_queue, delete_from_queue, get_queue, get_usersinfo_db, \
-    get_username_by_id, insert_last_rate, get_last_rate, get_ban, delete_row, get_id_by_username, check_user, \
-    get_not_incel, check_new_user, change_queue, get_unban, add_new_birthday, get_birthday, get_top_incels
-from sql_photos import *
-from graphics import *
-from weekly_rates import *
-from tier_list import draw_tier_list
-from statham import get_randQuote, insert_quote, get_statham_db, del_quote
-from administrators import *
-from parser import *
-from cv_color import *
-from watermark import *
-
-load_dotenv(find_dotenv())
-
-API_TOKEN: str = os.getenv('TOKEN')
-channel_id = os.getenv('CHANNEL_ID')
-channel_id_public = os.getenv('CHANNEL_ID_public')
-ya_token = os.getenv('YAtoken')
-storage: MemoryStorage = MemoryStorage()
-
-bot: Bot = Bot(token=API_TOKEN, parse_mode="HTML")
-dp: Dispatcher = Dispatcher(storage=storage)
-current_dm_id = {}
-states_users = {}
-caption_global = {}
-legendary_quote = 'Назвался груздем — пошёл на хуй\nНе сделал дело — пошёл на хуй\nИ баба с возу пошла на хуй\nИ волки на хуй, и овцы на хуй\n\nХотел как лучше, а пошёл на хуй\nДают — бери, а бьют — иди на хуй\nДружба дружбой, а на хуй иди\nЧья бы корова мычала, а твоя пошла на хуй\n\nУченье свет, а ты пошёл на хуй\nСемь раз отмерь и иди на хуй\nСкажи мне кто твой друг, и оба на хуй\nЧем бы дитя не тешилось, а шло бы на хуй\n\nПришла беда — пошла на хуй!\nГотовь сани летом, а зимой на хyй иди!\nСо своим уставом иди на хуй!\nИди на хуй не отходя от кассы!'
-hz_answers = ['Я тебя не понимаю...', 'Я не понимаю, о чем ты', 'Что ты имеешь в виду? 🧐', 'Я в замешательстве 🤨',
-              'Не улавливаю смысла 🙃', 'Что ты пытаешься сказать❓', 'Не понимаю твоего сообщения 😕',
-              '🤷‍♂️ Не понимаю 🤷‍♀️']
-emoji_lol = ['🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🫛', '🥦', '🥬', '🥒', '🌶', '🫑',
-             '🌽', '🥕', '🫒', '🧄', '🧅', '🥔', '🍠', '🫚', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🧆',
-             '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍡', '🍧', '🍨', '🍦',
-             '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🍯', '🥛', '🫗', '🍼', '🫖', '☕️', '🍵', '🧃', '🥤', '🧋', '🍶', '🍾', '🧊', '⚽️',
-             '🏀', '🏈', '⚾️', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🎧', '🎫', '🎟', '🎲', '♟', '🎯', '🎳', '🎮', '🎰', '🧩', '🗾', '🎑', '🏞', '🌅',
-             '🌄', '🌠', '🎇', '🎆', '🌇', '🌆', '🏙', '🌃', '🌌', '🌉', '🌁', '💣', '🧨', '💊', '🎁', '🎈', '🛍', '🪩', '📖', '📚', '📙', '📘', '📗', '📕', '📒', '📔',
-             '📓', '📰', '🗞', '🧵', '👚', '👕', '👖', '👔', '💼', '👜', '🎩', '🧢', '👒', '🎓', '🧳', '👓', '🕶', '🥽', '🌂', '💍', '🐶', '🐭', '🐹', '🐰', '🦊', '🐻',
-             '🐼', '🐻‍❄️', '🐨', '🐯', '🦁', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🐱', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🪿', '🦆', '🐦‍⬛️', '🦅', '🦉', '🦇', '🐺',
-             '🐴', '🦄', '🐝', '🦋', '🦖', '🦕', '🐙', '🦑', '🪼', '🦐', '🐬', '🐋', '🐳', '🦈', '🦭', '🪽', '🕊', '🪶', '🐉', '🐲', '🦔', '🐁', '🌵', '🎄', '🌲', '🌳',
-             '🌴', '🪵', '🌱', '🌿', '☘️', '🍀', '🎍', '🪴', '🎋', '🍃', '🍂', '🍁', '🪺', '🐚', '🪸', '🪨', '🌾', '💐', '🌷', '🌹', '🥀', '🪻', '🪷', '🌺', '🌸', '🌼',
-             '🌻', '🌎', '🌍', '🌏', '🪐', '💫', '⭐️', '✨', '💥', '🔥', '🌪', '🌈', '☀️', '🌤', '⛅️', '🌥', '☁️', '☃️', '⛄️', '💨', '☂️', '🌊', '🌫']
-emoji_banned = '⛔❗🤯😳❌⭕🛑📛🚫💢🚷📵🔴🟥💣🗿🐓🙊🙉🙈🐷🫵🥲🙁😕😟😔😞😧😦😯🙄😵💀🚨😐'
-dice_points = {'🎲': 6, '🎯': 6, '🎳': 6, '🏀': 4, '⚽': 3, '🎰': 64}
-replicas = {}
-with open('replicas.txt', 'r', encoding='utf-8') as file:
-    replicas = json.load(file)
-emoji = {
-    0: '🤢',
-    1: '🤮',
-    2: '😒',
-    3: '😕',
-    4: '😔',
-    5: '😐',
-    6: '🙂',
-    7: '😊',
-    8: '🥰',
-    9: '😘',
-    10: '😍',
-    11: '💦'
-}
-rate = {
-    11: '2D',
-    10: 'Жена (Mommy)',
-    9: 'Я бы ей дал',
-    8: 'Ахуенная',
-    7: 'Хорошенькая',
-    6: 'Ничего такая',
-    5: 'Под пиво пойдет',
-    4: 'Под водочку сойдёт',
-    3: 'Хуйня (я бы ей не дал)',
-    2: 'Полная хуйня',
-    1: 'Что ты такое...?',
-    0: 'Ребят... вырвите мне глаза'
-}
-rate2 = {
-    11: '2D',
-    10: 'mommy',
-    9: 'Я бы ей дал',
-    8: 'Ахуенная',
-    7: 'Хорошенькая',
-    6: 'Ничего такая',
-    5: 'Под пиво пойдет',
-    4: 'Под водочку сойдёт',
-    3: 'Хуйня',
-    2: 'Полная хуйня',
-    1: 'хуже чем полная хуйня',
-    0: 'вырвите мне глаза'
-}
-
-rate3 = {
-    10: '#Богиня',
-    9: '#Шоколадная',
-    8: '#Вашей_маме_зять_не_нужен<a href="https://t.me/RatePhotosBot">?</a>',
-    7: '#Прелесть',
-    6: '#Найс',
-    5: '#Мило',
-    4: '#На_любителя',
-    3: '#Сомнительно',
-    2: '#Cтрашное',
-    1: '#Фу',
-    0: '#Кандидат_от_оппозиции'
-}
-incels = get_users()
+incels = sync_get_users()
 
 class FSMFillForm(StatesGroup):
     verified = State()
@@ -300,22 +165,22 @@ async def urbanned(message: Message, state: FSMContext):
                          reply_markup=ReplyKeyboardRemove())
 
 
-def get_keyboard(user_id: int):
-    if user_id in get_users():
-        queue_len = len(get_queue(user_id))
+async def get_keyboard(user_id: int):
+    if user_id in await get_users():
+        queue_len = len(await get_queue(user_id))
         input_field = 'Сейчас новых фоточек нет, но ты можешь кинуть свою 🥰'
         if queue_len != 0:
             input_field = f'В очереди {queue_len} 🚨 Оцени фотки! 😡'
-    if user_id in get_admins():
+    if user_id in await get_admins():
         admin_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
             keyboard=[[statistics_button, quote_button], [edit_rate, resend], [settings_button]], resize_keyboard=True,
             input_field_placeholder=input_field)
         return admin_keyboard
-    elif user_id in get_users():
+    elif user_id in await get_users():
         basic_keyboard: ReplyKeyboardMarkup = ReplyKeyboardMarkup(
             keyboard=[[statistics_button, quote_button], [edit_rate, resend]], resize_keyboard=True, input_field_placeholder=input_field)
         return basic_keyboard
-    if len(get_avgs_not_incel(user_id)) > 5:
+    if len(await get_avgs_not_incel(user_id)) > 5:
         return not_incel_keyboard
     return None
 
@@ -323,11 +188,11 @@ def get_keyboard(user_id: int):
 @dp.message(F.text, ban_username())
 async def ban_username_command(message: Message):
     if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
         return
     s = message.text[5:]
-    delete_row_in_average(get_id_by_username(s))
-    result = get_ban(get_id_by_username(s))
+    await delete_row_in_average(await get_id_by_username(s))
+    result = await get_ban(await get_id_by_username(s))
     if result == 0:
         await message.answer(text=f'Строка с username: <i>"{s}"</i> не найдена в таблице')
     else:
@@ -337,10 +202,10 @@ async def ban_username_command(message: Message):
 @dp.message(F.text, unban_username())
 async def unban_username_command(message: Message):
     if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
         return
     s = message.text[7:]
-    result = get_unban(get_id_by_username(s))
+    result = await get_unban(await get_id_by_username(s))
     if result == 0:
         await message.answer(text=f'Строка с username=<i>"{s}"</i> не найдена в таблице')
     else:
@@ -355,7 +220,7 @@ async def add_birthday_func(message: Message):
         username = match.group(1)
         date = match.group(2)
         try:
-            add_new_birthday(get_id_by_username(username), int(datetime.datetime.strptime(date, '%Y-%m-%d').timestamp()))
+            await add_new_birthday(await get_id_by_username(username), int(datetime.datetime.strptime(date, '%Y-%m-%d').timestamp()))
             await message.answer(f'Ты добавил ДР <i>{date}</i> для пользователя <b>@{username}</b>')
         except Exception as e:
             await message.answer(f'Произошла ошибка!\n{e}')
@@ -366,11 +231,11 @@ async def add_birthday_func(message: Message):
 @dp.message(F.text, clear_states_username())
 async def clear_state_username(message: Message):
     if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
         return
     s = message.text[4:]
     try:
-        add_current_state(id=get_id_by_username(s), num=0)
+        await add_current_state(id=await get_id_by_username(s), num=0)
         await message.answer(text=f'Состояние {s} очищено 🫡')
     except Exception as e:
         await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
@@ -379,13 +244,13 @@ async def clear_state_username(message: Message):
 @dp.message(F.text, change_queue_username())
 async def change_queue_command(message: Message):
     if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
         return
     s = message.text[4:]
     try:
         username = s[:s.find('\n')]
         new_queue = s[s.find('\n') + 1:]
-        change_queue(get_id_by_username(username), new_queue)
+        await change_queue(await get_id_by_username(username), new_queue)
         await message.answer(f'Очередь для {username} изменена на {new_queue}')
 
     except Exception as e:
@@ -395,7 +260,7 @@ async def change_queue_command(message: Message):
 @dp.message(F.text, change_average_filter())
 async def change_average_command(message: Message):
     if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
         return
     pattern = r'/(\w+)_([\w\d]+)_([\d]+)_([\d]+)'
     match = re.match(pattern, message.text)
@@ -405,11 +270,11 @@ async def change_average_command(message: Message):
             username = match.group(2)
             sum_value = int(match.group(3))
             amount = int(match.group(4))
-            user_id = get_id_by_username(username)
+            user_id = await get_id_by_username(username)
             if user_id is None or sum_value <= 0 or amount <= 0:
                 await message.answer(text=f'Произошла ошибка! Ты еблан')
                 return
-            change_avg_rate(user_id, sum_value, amount)
+            await change_avg_rate(user_id, sum_value, amount)
             await message.answer(f'Значения для {username} были изменены на {sum_value}, {amount}')
         except Exception as e:
             await message.answer(text=f'Произошла ошибка! Ты еблан\n{e}')
@@ -419,7 +284,7 @@ async def change_average_command(message: Message):
 
 @dp.message(Command(commands='new_quote'), F.from_user.id.in_(incels))
 async def send_quote_dada(message: Message, state: FSMContext):
-    incels = get_users()
+    incels = await get_users()
     await message.answer(text='Пришли цитату в формате фото или текста')
     await state.set_state(FSMFillForm.sendQuote)
 
@@ -428,7 +293,7 @@ cnt = 1
 @dp.message(Command(commands='test'), F.from_user.id.in_(incels))
 async def test_something(message: Message):
     #await message.answer(text='Эта команда для тестирования новых функций')
-    await message.answer_photo(photo=get_photo_id_by_id(random.randint(1,1970)), reply_markup=
+    await message.answer_photo(photo=await get_photo_id_by_id(random.randint(1,1970)), reply_markup=
             InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='Еще', callback_data='more1')]]))
     global cnt
     cnt += 1
@@ -436,12 +301,12 @@ async def test_something(message: Message):
 
 @dp.message(Command(commands='amogus'))
 async def amogus_command(message: Message):
-    await message.answer(text=random.choice(replicas['amogus']), reply_markup=get_keyboard(message.from_user.id))
+    await message.answer(text=random.choice(replicas['amogus']), reply_markup=await get_keyboard(message.from_user.id))
 
 
 @dp.message(Command(commands='pepe'))
 async def pepe_command(message: Message):
-    await message.answer(text=random.choice(replicas['pepe']), reply_markup=get_keyboard(message.from_user.id))
+    await message.answer(text=random.choice(replicas['pepe']), reply_markup=await get_keyboard(message.from_user.id))
 
 
 @dp.message(Command(commands='phasalov'))
@@ -452,20 +317,20 @@ async def phasalov_command(message: Message):
            f"        n = {n};\n"
            f"    {'}'}\n"
            f"{'}'}```")
-    await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id), parse_mode="MarkdownV2")
+    await message.answer(text=txt, reply_markup=await get_keyboard(message.from_user.id), parse_mode="MarkdownV2")
 
 
 @dp.callback_query(F.data == 'more1')
 async def more1(callback: CallbackQuery):
     global cnt
-    await callback.message.edit_media(media=InputMediaPhoto(media=get_photo_id_by_id(random.randint(1,1970))), reply_markup=
+    await callback.message.edit_media(media=InputMediaPhoto(media=await get_photo_id_by_id(random.randint(1, 1970))), reply_markup=
             InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='Еще', callback_data='more1')]]))
     cnt+=1
 
 
 @dp.message(Command(commands='send_tier_list'), F.from_user.id.in_(incels))
 async def send_tier_and_delete(message: Message, state: FSMContext):
-    incels = get_users()
+    incels = await get_users()
     await message.answer(text='Тир лист начал генерироваться...')
     await weekly_tierlist(message.from_user.id)
 
@@ -501,12 +366,12 @@ async def update_replicas_file(message: Message, state: FSMContext):
         if message.document and message.document.mime_type == 'text/plain':
             f = await bot.get_file(message.document.file_id)
             f_path = f.file_path
-            await bot.download_file(file_path=f_path, destination='replicas2.txt')
+            await bot.download_file(file_path=f_path, destination=f'{os.path.dirname(__file__)}/DB/replicas2.txt')
             try:
-                with open('replicas2.txt', 'r', encoding='utf-8') as file:
+                with open(f'{os.path.dirname(__file__)}/DB/replicas2.txt', 'r', encoding='utf-8') as file:
                     replicas = json.load(file)
-                shutil.copyfile('replicas2.txt', 'replicas.txt')
-                os.remove('replicas2.txt')
+                shutil.copyfile(f'{os.path.dirname(__file__)}/DB/replicas2.txt', f'{os.path.dirname(__file__)}/DB/replicas.txt')
+                os.remove(f'{os.path.dirname(__file__)}/DB/replicas2.txt')
                 await message.answer('Новый файл сохранен')
             except Exception as e:
                 await bot.send_message(chat_id=972753303,
@@ -520,7 +385,7 @@ async def update_replicas_file(message: Message, state: FSMContext):
 async def permanently_delete_db(callback: CallbackQuery):
     if callback.data == 'ya_gay_delete_tier_db':
         await callback.message.answer(text='<b>💀 База данных с фотками тир листа удалена!</b>\n\nАдмин даст тебе пизды!')
-        clear_db()
+        await clear_db()
     else:
         await callback.message.answer(text='Правильный выбор! База данных осталась невредима 👍')
     await callback.message.edit_reply_markup(reply_markup=None)
@@ -547,7 +412,7 @@ async def send_dm(message: Message, state: FSMContext):
     if len(s) <= 2:
         await message.answer(text=f'Пользователь с username: <i>"{s}"</i> не найден в таблице')
         return
-    result = check_user(s)
+    result = await check_user(s)
     if result is None:
         await message.answer(text=f'Пользователь с username: <i>"{s}"</i> не найден в таблице')
     else:
@@ -562,14 +427,14 @@ async def del_username(message: Message):
         await message.answer(text='Иди нахуй!')
         return
     s = message.text[5:]
-    result = delete_row(s)
+    result = await delete_row(s)
     if result == 0:
         await message.answer(text=f'Строка с username: <i>"{s}"</i> не найдена в таблице')
     else:
         await message.answer(text=f'Строка с username: <i>"{s}"</i> была успешно удалена')
 
 
-def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_to_delete=0, back_ids=0, delete=True):
+async def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_to_delete=0, back_ids=0, delete=True):
     array_buttons: list[list[InlineKeyboardButton]] = [[], []]
     if back:
         array_buttons = [[InlineKeyboardButton(text='🔙',
@@ -583,7 +448,7 @@ def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_
 
     if mailing == 3:
         if delete:
-            add_note(num, '')
+            await add_note(num, '')
         array_buttons.append([
             InlineKeyboardButton(text='🔙', callback_data=ManageSettings(action=8, photo_id=ids, message_to_delete=message_to_delete,
                                                                         back_ids=back_ids).pack())])
@@ -592,10 +457,10 @@ def get_rates_keyboard(num: int, mailing: int = 1, ids='0', back=False, message_
 
 
 async def send_results(num: int, rate: str):
-    origin = get_origin(num)
-    origin_id = check_user(origin)
-    if origin_id and origin_id not in get_users():
-        add_not_incel_photo(num, get_photo_id_by_id(num), origin_id, float(rate))
+    origin = await get_origin(num)
+    origin_id = await check_user(origin)
+    if origin_id and origin_id not in await get_users():
+        await add_not_incel_photo(num, await get_photo_id_by_id(num), origin_id, float(rate))
         if origin_id is not None:
             if float(rate) <= 5:
                 emoji_loc = '📉'
@@ -603,8 +468,8 @@ async def send_results(num: int, rate: str):
                 emoji_loc = '📈'
             caption = f'{emoji_loc} Твое фото оценено на <b>{rate}</b> из <b>10</b>\n\n❤️ <i>Это не моё мнение и не мнение команды RatePhotosBot. Не судите строго за ошибки — я только учусь</i>'
             try:
-                await bot.send_photo(chat_id=origin_id, photo=get_photo_id_by_id(num), caption=caption, reply_markup=get_keyboard(origin_id))
-                if len(get_avgs_not_incel(origin_id)) == 6:
+                await bot.send_photo(chat_id=origin_id, photo=await get_photo_id_by_id(num), caption=caption, reply_markup=await get_keyboard(origin_id))
+                if len(await get_avgs_not_incel(origin_id)) == 6:
                     await bot.send_message(chat_id=origin_id, text='🙀 Теперь тебе доступна статистика!\nНажимай скорее <i>/stat</i>', reply_markup=not_incel_keyboard)
             except Exception as e:
                 await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
@@ -613,20 +478,20 @@ async def send_results(num: int, rate: str):
 async def send_group_photo(user_id: int, num: str):
     if '-' not in num:
         async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
-            photo = send_photos_by_id(int(num))
-            caption = f'👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>'
+            photo = await send_photos_by_id(int(num))
+            caption = f'👥 <b><a href="vk.com/{photo[1]}">{await get_group_name(photo[1][:photo[1].find("?")])}</a></b>'
             msg = await bot.send_photo(chat_id=user_id, photo=photo[3], caption=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
                                        reply_markup=get_manage_photo(ids=int(num)))
-            set_message_to_delete(user_id, f'{msg.message_id}')
+            await set_message_to_delete(user_id, f'{msg.message_id}')
 
         return
     num = list(map(int, num.split('-')))
     nums = [i for i in range(num[0], num[1] + 1)]
-    photo = send_photos_by_id(nums[0])
-    caption = f'👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>'
+    photo = await send_photos_by_id(nums[0])
+    caption = f'👥 <b><a href="vk.com/{photo[1]}">{await get_group_name(photo[1][:photo[1].find("?")])}</a></b>'
     media = []
     for num in nums:
-        loc_photo = send_photos_by_id(num)
+        loc_photo = await send_photos_by_id(num)
         media.append(InputMediaPhoto(media=loc_photo[3]))
     try:
         async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
@@ -634,41 +499,41 @@ async def send_group_photo(user_id: int, num: str):
             await bot.send_message(chat_id=user_id, text=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
                                    reply_markup=get_manage_photo(ids=nums, message_to_delete=f'{msg[0].message_id}, {msg[-1].message_id}'),
                                    disable_web_page_preview=True)
-            set_message_to_delete(user_id, f'{msg[0].message_id}-{msg[-1].message_id}')
+            await set_message_to_delete(user_id, f'{msg[0].message_id}-{msg[-1].message_id}')
     except Exception as e:
         await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 1\n{e}')
 
 
 async def already_in_db(path):
     try:
+        current_loop = asyncio.get_running_loop()
+        executor = concurrent.futures.ThreadPoolExecutor()
+
         rand_int = random.randint(1, 10 ** 8)
-        saved_path = f"public_photo{rand_int}.jpg"
+        saved_path = f"{os.path.dirname(__file__)}/pictures/public_photo{rand_int}.jpg"
         if path[:4] == 'http':
-            response = requests.get(path)
-            if response.status_code == 200:
-                with open(saved_path, "wb") as file:
-                    file.write(response.content)
-            hash = get_hash(saved_path)
-            os.remove(saved_path)
-            if get_similarities(hash):
-                return True
-            return False
+            async with aiohttp.ClientSession() as session:
+                async with session.get(path) as response:
+                    if response.status == 200:
+                        async with aiofiles.open(saved_path, "wb") as file:
+                            content = await response.read()
+                            await file.write(content)
         else:
             f = await bot.get_file(path)
             f_path = f.file_path
             await bot.download_file(f_path, saved_path)
-            hash = get_hash(saved_path)
-            os.remove(saved_path)
-            if get_similarities(hash):
-                return True
-            return False
+        hash = await current_loop.run_in_executor(executor, get_hash, saved_path)
+        os.remove(saved_path)
+        if await get_similarities(hash):
+            return True
+        return False
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 9945\n{e}')
         return False
 
 
 async def notify_admin(user_id: int, message_id=0):
-    sets = get_settings(user_id)
+    sets = await get_settings(user_id)
     if sets[6] is not None:
         groups_set = set(map(int, sets[6].split(',')))
         if message_id != 0:
@@ -679,7 +544,7 @@ async def notify_admin(user_id: int, message_id=0):
         cnt = 0
         skipped = 0
         for group in groups_set:
-            group_sets = get_group_sets(group)
+            group_sets = await get_group_sets(group)
             if message_id != 0:
                 progress = cnt_group / len(groups_set)
                 async with ChatActionSender(bot=bot, chat_id=user_id):
@@ -692,7 +557,7 @@ async def notify_admin(user_id: int, message_id=0):
             parameters = {'domain': group_sets[1], 'top_likes': group_sets[3], 'photo_amount': group_sets[4],
                           'time_delta': group_sets[5], 'last_update': group_sets[6] if group_sets[6] is not None else 0}
             try:
-                result = get_posts(parameters)
+                result = await get_posts(parameters)
             except Exception as e:
                 await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 2\n{e}')
             for link, post in result.items():
@@ -701,19 +566,18 @@ async def notify_admin(user_id: int, message_id=0):
                     cnt += 1
                     caption = f'👥 <b><a href="vk.com/{group_sets[1]}?w=wall{link}">{group_sets[7]}</a></b>, 👍 {post[2]}'
                     if len(post[0]) == 1:
-                        num = last_group_photo_id() + 1
-                        if sets[7] != 2:
+                        num = await last_group_photo_id() + 1
+                        if sets[7] == 1:
                             if await already_in_db(post[0][0]):
                                 skipped += 1
                                 continue
-                            else:
-                                await download_hash(link=post[0][0])
-                            add_group_photo(num, f"{group_sets[1]}?w=wall{link}",
-                                            format_text(post[1], group_sets[1], link), post[0][0])
+                            await download_hash(link=post[0][0])
+                            await add_group_photo(num, f"{group_sets[1]}?w=wall{link}",
+                                                  format_text(post[1], group_sets[1], link), post[0][0])
                             if cnt - 1 == skipped:
                                 await send_group_photo(user_id, str(num))
                             else:
-                                add_to_queue_group_photo(user_id, str(num))
+                                await add_to_queue_group_photo(user_id, str(num))
                         else:
                             extra2 = ''
                             await bot.send_photo(chat_id=user_id, photo=post[0][0],
@@ -724,15 +588,16 @@ async def notify_admin(user_id: int, message_id=0):
                         photo_ids = []
                         media = []
                         first = True
-                        num = last_group_photo_id()
+                        num = await last_group_photo_id()
                         for url in post[0]:
-                            if await already_in_db(url):
-                                continue
-                            await download_hash(link=url)
+                            if sets[7] == 1:
+                                if await already_in_db(url):
+                                    continue
+                                await download_hash(link=url)
                             num += 1
-                            if sets[7] != 2:
-                                add_group_photo(num, f"{group_sets[1]}?w=wall{link}",
-                                                format_text(post[1], group_sets[1], link), url)
+                            if sets[7] == 1:
+                                await add_group_photo(num, f"{group_sets[1]}?w=wall{link}",
+                                                      format_text(post[1], group_sets[1], link), url)
                             photo_ids.append(num)
                             if first and sets[7] == 2:
                                 media.append(InputMediaPhoto(media=url, caption=format_text(post[1], group_sets[1], link) + (
@@ -741,22 +606,22 @@ async def notify_admin(user_id: int, message_id=0):
                             else:
                                 media.append(InputMediaPhoto(media=url))
                         try:
+                            if len(media) == 0:
+                                skipped += 1
+                                continue
                             if sets[7] == 1:
-                                if len(media) == 0:
-                                    skipped += 1
-                                    continue
                                 if cnt - 1 == skipped:
                                     await send_group_photo(user_id, f'{photo_ids[0]}-{photo_ids[-1]}')
                                 else:
-                                    add_to_queue_group_photo(user_id, f'{photo_ids[0]}-{photo_ids[-1]}')
+                                    await add_to_queue_group_photo(user_id, f'{photo_ids[0]}-{photo_ids[-1]}')
                             else:
                                 async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
                                     await bot.send_media_group(user_id, media=media)
                         except Exception as e:
                             await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 3\n{e}')
-            update_time(group)
+            await update_time(group)
         if cnt == skipped:
-            if len(get_admins_queue(user_id)) == 0:
+            if len(await get_admins_queue(user_id)) == 0:
                 await bot.send_message(chat_id=user_id, text=f'Фото с текущими фильтрами не нашлось 😨')
             else:
                 await send_next_photo(user_id)
@@ -770,8 +635,8 @@ async def notify_admin(user_id: int, message_id=0):
                 await bot.delete_message(chat_id=user_id, message_id=message_id)
 
 
-def get_text_of_settings(user_id: int) -> str:
-    sets = get_settings(user_id)
+async def get_text_of_settings(user_id: int) -> str:
+    sets = await get_settings(user_id)
     extra_emoji = '🧊' if sets[7] == 2 else ''
     text = f'<b>⚙️{extra_emoji} Твои текущие настройки</b>\n<blockquote>'
     groups_str = ''
@@ -779,10 +644,10 @@ def get_text_of_settings(user_id: int) -> str:
         text += '<b>Группы:\n</b>🔄    🔢    📅     <i>название\n'
         groups_set = set(map(int, sets[6].split(',')))
         for group in groups_set:
-            settings = get_group_sets(group)
+            settings = await get_group_sets(group)
             if not settings[2]:
                 continue
-            text += ['🆕      ', '👍      '][settings[3]] + str(settings[4]).ljust(9) + str(settings[5]).ljust(8) + f'<a href = "https://vk.com/{get_group_domain(group)}">{get_group_name(group)}</a>\n'
+            text += ['🆕      ', '👍      '][settings[3]] + str(settings[4]).ljust(9) + str(settings[5]).ljust(8) + f'<a href = "https://vk.com/{await get_group_domain(group)}">{await get_group_name(group)}</a>\n'
         text += '</i>'
     else:
         groups_str = '<i>У тебя пока нет групп!</i>\n'
@@ -798,8 +663,8 @@ def get_text_of_settings(user_id: int) -> str:
     return text + groups_str + extra
 
 
-def get_text_of_group_sets(group_id: int, include_name: bool = True):
-    settings = get_group_sets(group_id)
+async def get_text_of_group_sets(group_id: int, include_name: bool = True):
+    settings = await get_group_sets(group_id)
     name = settings[7]
     domain = settings[1]
     text = f'👥 <b><a href="vk.com/{domain}">{name}</a></b>\n\n'
@@ -834,17 +699,17 @@ def confirm_keyboard(file_id: int):
     return InlineKeyboardMarkup(inline_keyboard=array)
 
 
-def get_admin_keyboard(user_id: int, cancel_url_sending: bool = False, superuser: bool = False):
+async def get_admin_keyboard(user_id: int, cancel_url_sending: bool = False, superuser: bool = False):
     if cancel_url_sending:
         return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='🔙', callback_data=AdminCallBack(action=1).pack())]])
     array_buttons: list[list[InlineKeyboardButton]] = []
     if superuser:
-        incels = list(get_users())
-        admins = get_admins()
+        incels = list(await get_users())
+        admins = await get_admins()
         for i in range((len(incels) + 2) // 3):
             loc_array = []
             for j in range(min(3, len(incels) - i * 3)):
-                username = get_username_by_id(incels[i * 3 + j])
+                username = await get_username_by_id(incels[i * 3 + j])
                 emoji_loc = ' 💎' if incels[i * 3 + j] in admins else ''
                 button = InlineKeyboardButton(text=username + emoji_loc,
                                               callback_data=AdminCallBack(action=5, user_id=incels[i * 3 + j]).pack())
@@ -918,18 +783,18 @@ def get_manage_photo(ids: Union[int, List], mode=1, back_ids=0, message_to_delet
         return markup
 
 
-def get_group_keyboard(groups_id: Union[List[int], None], go_back_to_menu: bool = False):
+async def get_group_keyboard(groups_id: Union[List[int], None], go_back_to_menu: bool = False):
     back = InlineKeyboardButton(text='🔙', callback_data=AdminCallBack(action=-2).pack())
     add = InlineKeyboardButton(text='Добавить группу', callback_data=AdminCallBack(action=4).pack())
     array_buttons: list[list[InlineKeyboardButton]] = []
     if groups_id is None:
         array_buttons = [[add],[back]]
         return InlineKeyboardMarkup(inline_keyboard=array_buttons)
-    active_groups = get_active_groups()
+    active_groups = await get_active_groups()
     for i in range((len(groups_id) + 2) // 3):
         loc_array = []
         for j in range(min(3, len(groups_id) - i * 3)):
-            domain = get_group_name(groups_id[i * 3 + j])
+            domain = await get_group_name(groups_id[i * 3 + j])
             emoji_loc = '🟢' if groups_id[i * 3 + j] in active_groups else '❌'
             button = InlineKeyboardButton(text=emoji_loc + ' ' + domain,
                                           callback_data=GroupCallBack(group_id=groups_id[i * 3 + j]).pack())
@@ -940,11 +805,11 @@ def get_group_keyboard(groups_id: Union[List[int], None], go_back_to_menu: bool 
     return markup
 
 
-def get_notify_keyboard(user_id: int, hour: bool = False, minute: bool = False, week: bool = False):
+async def get_notify_keyboard(user_id: int, hour: bool = False, minute: bool = False, week: bool = False):
     week_array = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
-    settings = get_settings(user_id)
+    settings = await get_settings(user_id)
     if week:
-        weekdays = get_weekdays(user_id)
+        weekdays = await get_weekdays(user_id)
         array_buttons = [[]]
         back = InlineKeyboardButton(text='🔙', callback_data=AdminCallBack(action=2).pack())
         for i in range(7):
@@ -964,7 +829,7 @@ def get_notify_keyboard(user_id: int, hour: bool = False, minute: bool = False, 
     if minute:
         array_buttons = [[]]
         back = InlineKeyboardButton(text='🔙', callback_data=AdminCallBack(action=2).pack())
-        hour = get_hour(user_id)
+        hour = await get_hour(user_id)
         start = 0
         if hour == 7 or hour == 19:
             start = 1
@@ -974,7 +839,7 @@ def get_notify_keyboard(user_id: int, hour: bool = False, minute: bool = False, 
         custom = InlineKeyboardButton(text='Свой вариант', callback_data=NotifySettings(action=6).pack())
         array_buttons.append([back, custom])
         return InlineKeyboardMarkup(inline_keyboard=array_buttons)
-    settings = get_settings(user_id)
+    settings = await get_settings(user_id)
     back = InlineKeyboardButton(text='🔙', callback_data=AdminCallBack(action=-2).pack())
     day_of_week = InlineKeyboardButton(text='Настроить дни недели 🗓', callback_data=NotifySettings(action=0).pack())
     hour = InlineKeyboardButton(text=f'В {settings[4]} ч.', callback_data=NotifySettings(action=1).pack())
@@ -1013,31 +878,32 @@ def group_settings_keyboard(settings: tuple, go_back_to_public_settings: bool = 
 async def moderate_main_settings(callback: CallbackQuery, callback_data: AdminCallBack, state: FSMContext):
     action = callback_data.action
     if action == -2:
-        await callback.message.edit_text(text=get_text_of_settings(callback.from_user.id), disable_web_page_preview=True,
-                                         reply_markup=get_admin_keyboard(callback.from_user.id))
+        await callback.message.edit_text(text=await get_text_of_settings(callback.from_user.id), disable_web_page_preview=True,
+                                         reply_markup=await get_admin_keyboard(callback.from_user.id))
     elif action == 0:
-        set_inactive(callback.from_user.id)
+        await set_inactive(callback.from_user.id)
         await callback.message.delete()
         await callback.message.answer(text='Ты исключен из админов! Лох, ну ты типа пидор', reply_markup=basic_keyboard)
     elif action == 1:
         await state.clear()
-        groups_str = get_settings(callback.from_user.id)[6]
+        groups_str = await get_settings(callback.from_user.id)
+        groups_str = groups_str[6]
         if groups_str is None:
             await callback.message.edit_text(text='👥 У тебя еще нет групп. Самое время добавить! Жми 👇🏿',reply_markup=get_group_keyboard(groups_id=None))
             return
         text = '<b>👥 Нажми на группу для регулировки или добавь новую</b>'
-        await callback.message.edit_text(text=text, reply_markup=get_group_keyboard(sorted(list(map(int, groups_str.split(','))))))
+        await callback.message.edit_text(text=text, reply_markup=await get_group_keyboard(sorted(list(map(int, groups_str.split(','))))))
     elif action == 2:
         text = '<b>🔊 Нажми на кнопку для настройки периодичности рассылки</b>'
-        await callback.message.edit_text(text=text, reply_markup=get_notify_keyboard(callback.from_user.id))
+        await callback.message.edit_text(text=text, reply_markup=await get_notify_keyboard(callback.from_user.id))
     elif action == 3:
-        sets = get_settings(callback.from_user.id)
+        sets = await get_settings(callback.from_user.id)
         if not sets[1]:
             await callback.message.edit_text('Ты больше не админ! Лох, ну ты типа пидор')
             return
         if sets[6] is None:
             await callback.message.edit_text('👥 Ты еще не добавил ни одной группы! Самое время добавить! Жми 👇',
-                                             reply_markup=get_group_keyboard(groups_id=None))
+                                             reply_markup=await get_group_keyboard(groups_id=None))
         else:
             mes_id = await bot.send_photo(chat_id=callback.from_user.id, photo='https://i.postimg.cc/TYv4PFJP/drawing-kitten-animals-9-Favim-1.jpg', caption=f'Начал поиск фото по группам')
             await callback.answer()
@@ -1045,47 +911,47 @@ async def moderate_main_settings(callback: CallbackQuery, callback_data: AdminCa
 
 
     elif action == 4:
-        await callback.message.edit_text(text='Скинь ссылку на стену группы вк, из которой ты хочешь получать фото', reply_markup=get_admin_keyboard(callback.from_user.id, cancel_url_sending=True))
+        await callback.message.edit_text(text='Скинь ссылку на стену группы вк, из которой ты хочешь получать фото', reply_markup=await get_admin_keyboard(callback.from_user.id, cancel_url_sending=True))
         await state.set_state(FSMFillForm.inserting_url)
     elif action == -1:
-        await callback.message.edit_text(text='<b>👤 Все инцелы</b>: вот они слева направо', reply_markup=get_admin_keyboard(callback.from_user.id, superuser=True))
+        await callback.message.edit_text(text='<b>👤 Все инцелы</b>: вот они слева направо', reply_markup=await get_admin_keyboard(callback.from_user.id, superuser=True))
     elif action == 5:
         user_id = callback_data.user_id
-        if user_id in get_admins():
-            set_inactive(user_id)
+        if user_id in await get_admins():
+            await set_inactive(user_id)
             await bot.send_message(chat_id=user_id, text='Ты больше не админ! Лох, ну ты типа пидор', reply_markup=basic_keyboard)
         else:
-            set_admin(user_id)
+            await set_admin(user_id)
             await bot.send_message(chat_id=user_id, text='Тебя назначили админом 👑\n<i>Напоминаю, что админы работаю бесплатно</i>', reply_markup=admin_keyboard)
         await callback.message.edit_text(text='<b>👤 Все инцелы</b>: вот они слева направо',
-                                         reply_markup=get_admin_keyboard(callback.from_user.id, superuser=True))
+                                         reply_markup=await get_admin_keyboard(callback.from_user.id, superuser=True))
 
 
 async def send_next_photo(user_id: int):
-    queue = get_admins_queue(user_id)
+    queue = await get_admins_queue(user_id)
     if len(queue) == 0:
         return
     i = min(queue)
-    remove_from_admins_queue(user_id, i)
+    await remove_from_admins_queue(user_id, i)
     try:
         extra = '' if len(queue) == 0 else f' | {len(queue)} в очереди'
         if '-' not in i:
             async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
-                photo = send_photos_by_id(int(i))
-                caption = f'👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
+                photo = await send_photos_by_id(int(i))
+                caption = f'👥 <b><a href="vk.com/{photo[1]}">{await get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
                 msg = await bot.send_photo(chat_id=user_id, photo=photo[3],
                                            caption=photo[2] + ("\n\n" if len(photo[2]) > 0 else "") + caption,
                                            reply_markup=get_manage_photo(ids=int(i)))
-                set_message_to_delete(user_id, str(msg.message_id))
+                await set_message_to_delete(user_id, str(msg.message_id))
             return
         else:
             num = list(map(int, i.split('-')))
             nums = [i for i in range(num[0], num[1] + 1)]
-            photo = send_photos_by_id(nums[0])
-            caption = f'👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
+            photo = await send_photos_by_id(nums[0])
+            caption = f'👥 <b><a href="vk.com/{photo[1]}">{await get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
             media = []
             for num in nums:
-                loc_photo = send_photos_by_id(num)
+                loc_photo = await send_photos_by_id(num)
                 media.append(InputMediaPhoto(media=loc_photo[3]))
 
             async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
@@ -1095,7 +961,7 @@ async def send_next_photo(user_id: int):
                                        reply_markup=get_manage_photo(ids=nums,
                                                                      message_to_delete=f'{msg[0].message_id}, {msg[-1].message_id}'),
                                        disable_web_page_preview=True)
-                set_message_to_delete(user_id, f'{msg[0].message_id}-{msg[-1].message_id}')
+                await set_message_to_delete(user_id, f'{msg[0].message_id}-{msg[-1].message_id}')
     except Exception as e:
         await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 4\n{e}')
         if user_id != 972753303:
@@ -1111,42 +977,42 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
     if action == 2:
         await callback.answer('Фото будет выложено без подписи')
     if action == 1 or action == 2:
-        information = get_group_photo_info(photo_id)
-        last_num = get_last()
-        add_photo_id(last_num + 1, information[3], f'👥 {information[1]}')
+        information = await get_group_photo_info(photo_id)
+        last_num = await get_last()
+        await add_photo_id(last_num + 1, information[3], f'👥 {information[1]}')
         if information[2] != '' and action == 1:
-            add_note(last_num + 1, information[2])
+            await add_note(last_num + 1, information[2])
         try:
             await callback.message.edit_caption(
-                caption=f'Оцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{get_group_name(information[1][:information[1].find("?"):])}</a></b>',
-                reply_markup=get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
+                caption=f'Оцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{await get_group_name(information[1][:information[1].find("?"):])}</a></b>',
+                reply_markup=await get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
                                                 message_to_delete=callback_data.message_to_delete, delete=False))
         except Exception:
             await callback.message.edit_text(
-                text=f'Оцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{get_group_name(information[1][:information[1].find("?"):])}</a></b>',
-                reply_markup=get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
+                text=f'Оцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{await get_group_name(information[1][:information[1].find("?"):])}</a></b>',
+                reply_markup=await get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
                                                 message_to_delete=callback_data.message_to_delete, delete=False),
                 disable_web_page_preview=True)
     elif action == 3:
         if callback.message.photo:
             await callback.message.edit_caption(caption='Введи следующим сообщением подпись к этой пикче...',
-                                                reply_markup=get_rates_keyboard(0, 3, photo_id, True))
+                                                reply_markup=await get_rates_keyboard(0, 3, photo_id, True))
         else:
             await callback.message.edit_text('Введи следующим сообщением подпись к этой пикче...',
-                                             reply_markup=get_rates_keyboard(0, 3, photo_id,
+                                             reply_markup=await get_rates_keyboard(0, 3, photo_id,
                                                                              back_ids=callback_data.back_ids,
                                                                              message_to_delete=callback_data.message_to_delete,
                                                                              back=True))
-        information = get_group_photo_info(photo_id)
-        last_num = get_last()
-        add_photo_id(last_num + 1, information[3], f'👥 {information[1]}')
-        set_message_to_delete(callback.from_user.id, str(callback.message.message_id))
+        information = await get_group_photo_info(photo_id)
+        last_num = await get_last()
+        await add_photo_id(last_num + 1, information[3], f'👥 {information[1]}')
+        await set_message_to_delete(callback.from_user.id, str(callback.message.message_id))
         caption_global[callback.from_user.id] = (last_num + 1, photo_id)
         await state.set_state(FSMFillForm.inserting_caption)
     elif action == 4:
         try:
             await send_next_photo(callback.from_user.id)
-            del_group_photo(photo_id)
+            await del_group_photo(photo_id)
             await callback.message.delete()
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 5\n{e}')
@@ -1160,7 +1026,7 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
             start = int(photo_id.split(',')[0])
             end = int(photo_id.split(',')[1])
             for photo_id in range(start, end + 1):
-                del_group_photo(photo_id)
+                await del_group_photo(photo_id)
             await callback.message.delete()
             msgs = list(map(int, callback_data.message_to_delete.split(',')))
             msgs_list = [i for i in range(msgs[0], msgs[-1] + 1)]
@@ -1172,11 +1038,11 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
         first = int(ids_str.split(',')[0])
         last = int(ids_str.split(',')[1])
         ids_list = [i for i in range(first, last + 1)]
-        info = get_group_photo_info(first)
-        queue = get_admins_queue(callback.from_user.id)
+        info = await get_group_photo_info(first)
+        queue = await get_admins_queue(callback.from_user.id)
         extra = f' | {len(queue) + 1} в очереди'
         txt = '' if info[2] is None else info[2]
-        caption = f'{txt}\n\n👥 <b><a href="vk.com/{info[1]}">{get_group_name(info[1][:info[1].find("?")])}</a></b>' + extra
+        caption = f'{txt}\n\n👥 <b><a href="vk.com/{info[1]}">{await get_group_name(info[1][:info[1].find("?")])}</a></b>' + extra
         await callback.message.edit_text(text=caption,
                                       reply_markup=get_manage_photo(ids=ids_list, message_to_delete=callback_data.message_to_delete),
                                       disable_web_page_preview=True)
@@ -1188,30 +1054,30 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
             id = [i for i in range(first, last + 1)]
         else:
             id = photo_id
-        queue = get_admins_queue(callback.from_user.id)
+        queue = await get_admins_queue(callback.from_user.id)
         extra = f' | {len(queue) + 1} в очереди'
-        photo = send_photos_by_id(int(photo_id))
+        photo = await send_photos_by_id(int(photo_id))
         txt = '' if photo[2] is None else photo[2]
-        caption = f'{txt}\n\n👥 <b><a href="vk.com/{photo[1]}">{get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
+        caption = f'{txt}\n\n👥 <b><a href="vk.com/{photo[1]}">{await get_group_name(photo[1][:photo[1].find("?")])}</a></b>' + extra
         if callback.message.photo:
             await callback.message.edit_caption(caption=caption, reply_markup=get_manage_photo(ids=id))
         else:
             await callback.message.edit_text(text=caption, reply_markup=get_manage_photo(ids=id, message_to_delete=callback_data.message_to_delete, back_ids=back_ids), disable_web_page_preview=True)
         await state.clear()
     elif action == 9:
-        information = get_group_photo_info(photo_id)
-        last_num = get_last()
-        add_photo_id(last_num + 1, information[3], f'👥 {information[1]}')
-        add_note(last_num + 1, '/anon')
+        information = await get_group_photo_info(photo_id)
+        last_num = await get_last()
+        await add_photo_id(last_num + 1, information[3], f'👥 {information[1]}')
+        await add_note(last_num + 1, '/anon')
         try:
             await callback.message.edit_caption(
-                caption=f'Стыдно такое выкладывать, да, выблядок?\nОцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{get_group_name(information[1][:information[1].find("?"):])}</a></b>',
-                reply_markup=get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
+                caption=f'Стыдно такое выкладывать, да, выблядок?\nОцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{await get_group_name(information[1][:information[1].find("?"):])}</a></b>',
+                reply_markup=await get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
                                                 message_to_delete=callback_data.message_to_delete, delete=False))
         except Exception:
             await callback.message.edit_text(
-                text=f'Стыдно такое выкладывать, да, выблядок?\nОцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{get_group_name(information[1][:information[1].find("?"):])}</a></b>',
-                reply_markup=get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
+                text=f'Стыдно такое выкладывать, да, выблядок?\nОцени фото из группы 👥 <b><a href="vk.com/{information[1]}">{await get_group_name(information[1][:information[1].find("?"):])}</a></b>',
+                reply_markup=await get_rates_keyboard(last_num + 1, 3, ids=photo_id, back_ids=callback_data.back_ids,
                                                 message_to_delete=callback_data.message_to_delete, delete=False),
                 disable_web_page_preview=True)
     elif action == 10:
@@ -1221,14 +1087,14 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
                            InlineKeyboardButton(text='Нет, я даун 👺', callback_data=ManageSettings(action=12, photo_id=photo_id,
                                                                                                    message_to_delete=callback_data.message_to_delete).pack())]]
         await callback.message.answer(text='Разделить фотки по отдельности❓', reply_markup=InlineKeyboardMarkup(inline_keyboard=local_keyboard))
-        set_message_to_delete(callback.from_user.id, callback.message.message_id)
+        await set_message_to_delete(callback.from_user.id, callback.message.message_id)
     elif action == 11:
         await callback.answer('Фотки будут высланы по отдельности')
-        messages_to_delete = get_message_to_delete(callback.from_user.id)
+        messages_to_delete = await get_message_to_delete(callback.from_user.id)
         min_photo = int(photo_id.split(',')[0])
         max_photo = int(photo_id.split(',')[1])
         for i in range(min_photo, max_photo + 1):
-            add_to_queue_group_photo(callback.from_user.id, str(i))
+            await add_to_queue_group_photo(callback.from_user.id, str(i))
         await send_next_photo(callback.from_user.id)
         await callback.message.delete()
         msgs = list(map(int, callback_data.message_to_delete.split(',')))
@@ -1244,8 +1110,8 @@ async def moderate_manage_settings(callback: CallbackQuery, callback_data: Manag
 
 @dp.callback_query(GroupCallBack.filter())
 async def moderate_group_settings(callback: CallbackQuery, callback_data: AdminCallBack):
-    settings = get_group_sets(callback_data.group_id)
-    await callback.message.edit_text(text=get_text_of_group_sets(callback_data.group_id, 1),
+    settings = await get_group_sets(callback_data.group_id)
+    await callback.message.edit_text(text=await get_text_of_group_sets(callback_data.group_id, 1),
                                      disable_web_page_preview=True,
                                      reply_markup=group_settings_keyboard(settings))
 
@@ -1255,37 +1121,37 @@ async def moderate_notify_settings(callback: CallbackQuery, callback_data: Notif
     action = callback_data.action
     if action == 0:
         txt = 'Выбери <b>дни недели</b>, в которые ты хочешь получать фото'
-        await callback.message.edit_text(text=txt, reply_markup=get_notify_keyboard(callback.from_user.id, week=True))
+        await callback.message.edit_text(text=txt, reply_markup=await get_notify_keyboard(callback.from_user.id, week=True))
     elif action == 1:
         txt = 'Выбери час или введи значение сам'
-        await callback.message.edit_text(text=txt, reply_markup=get_notify_keyboard(callback.from_user.id, hour=True))
+        await callback.message.edit_text(text=txt, reply_markup=await get_notify_keyboard(callback.from_user.id, hour=True))
     elif action == 2:
         txt = 'Выбери минуту или введи значение сам'
-        await callback.message.edit_text(text=txt, reply_markup=get_notify_keyboard(callback.from_user.id, minute=True))
+        await callback.message.edit_text(text=txt, reply_markup=await get_notify_keyboard(callback.from_user.id, minute=True))
     elif action == 3:
         hour = callback_data.hour
-        change_hour(callback.from_user.id, hour)
+        await change_hour(callback.from_user.id, hour)
         await callback.answer(text=f'{hour} 🕑')
         text = '<b>🔊 Нажми на кнопку для настройки периодичности рассылки</b>'
-        await callback.message.edit_text(text=text, reply_markup=get_notify_keyboard(callback.from_user.id))
+        await callback.message.edit_text(text=text, reply_markup=await get_notify_keyboard(callback.from_user.id))
     elif action == 4:
         await callback.message.edit_text(text='Введи свое значение часа, в который ты хочешь получать фото из выбанных групп. <u>Учти</u>, что сервер перезагружается в 7:00 и 19:00, поэтому это время лучше не выбирать. Выбрал — еблан!')
         await state.set_state(FSMFillForm.inserting_hour)
     elif action == 5:
         minute = callback_data.minute
         minute = str(minute) + '0'
-        change_minute(callback.from_user.id, minute)
+        await change_minute(callback.from_user.id, minute)
         await callback.answer(text=minute+ ' 🕑')
         text = '<b>🔊 Нажми на кнопку для настройки периодичности рассылки</b>'
-        await callback.message.edit_text(text=text, reply_markup=get_notify_keyboard(callback.from_user.id))
+        await callback.message.edit_text(text=text, reply_markup=await get_notify_keyboard(callback.from_user.id))
     elif action == 6:
         await callback.message.edit_text(text='Введи свое значение минут, в которые ты хочешь получать фото из выбанных групп. <u>Учти</u>, что сервер перезагружается в 7:00 и 19:00, поэтому это время лучше не выбирать. Выбрал — еблан!')
         await state.set_state(FSMFillForm.inserting_minute)
     elif action == 7:
         day = callback_data.week
-        change_weekdays(callback.from_user.id, day)
+        await change_weekdays(callback.from_user.id, day)
         txt = 'Выбери <b>дни недели</b>, в которые ты хочешь получать фото'
-        await callback.message.edit_text(text=txt, reply_markup=get_notify_keyboard(callback.from_user.id, week=True))
+        await callback.message.edit_text(text=txt, reply_markup=await get_notify_keyboard(callback.from_user.id, week=True))
     elif action == 8:
         await callback.answer('Данное значение выбрать нельзя!')
 
@@ -1295,52 +1161,53 @@ async def moderate_group_deep_settings(callback: CallbackQuery, callback_data: G
     group_id = callback_data.group_id
     if action == 1 or action == 2:
         if action == 1:
-            switch_active(group_id)
+            await switch_active(group_id)
         else:
-            switch_top_likes(group_id)
+            await switch_top_likes(group_id)
 
-        await callback.message.edit_text(text=get_text_of_group_sets(group_id),
-                                         disable_web_page_preview=True, reply_markup=group_settings_keyboard(get_group_sets(group_id)))
+        await callback.message.edit_text(text=await get_text_of_group_sets(group_id),
+                                         disable_web_page_preview=True, reply_markup=group_settings_keyboard(await get_group_sets(group_id)))
     elif action == 3:
-        await callback.message.edit_text(text='Нажми на количество постов, которое ты хочешь получать единоразово при одном обращении к группе', reply_markup=group_settings_keyboard(settings=get_group_sets(group_id), get_amount=True))
+        await callback.message.edit_text(text='Нажми на количество постов, которое ты хочешь получать единоразово при одном обращении к группе', reply_markup=group_settings_keyboard(settings=await get_group_sets(group_id), get_amount=True))
     elif action == 4:
         await callback.message.edit_text(text='Нажми на количество дней, сколько пост должен находиться в группе',
-                                         reply_markup=group_settings_keyboard(settings=get_group_sets(group_id), get_date=True))
+                                         reply_markup=group_settings_keyboard(settings=await get_group_sets(group_id), get_date=True))
     elif action == 5:
-        name = get_group_name(group_id)
+        name = await get_group_name(group_id)
         try:
-            delete_group(group_id, user_id=callback.from_user.id)
+            await delete_group(group_id, user_id=callback.from_user.id)
             await callback.answer(f'Группа {name} удалена 🗑')
         except Exception as e:
             await callback.message.edit_text(f'Произошла ошибка! Код 7\n{e}')
-        groups_str = get_settings(callback.from_user.id)[6]
+        groups_str = await get_settings(callback.from_user.id)
+        groups_str = groups_str[6]
         if groups_str is None:
             await callback.message.edit_text(text='У тебя еще нет групп',
-                                             reply_markup=get_group_keyboard(groups_id=None))
+                                             reply_markup=await get_group_keyboard(groups_id=None))
             return
         text = '<b>👥 Нажми на группу для регулировки или добавь новую</b>'
         await callback.message.edit_text(text=text,
-                                         reply_markup=get_group_keyboard(sorted(list(map(int, groups_str.split(','))))))
+                                         reply_markup=await get_group_keyboard(sorted(list(map(int, groups_str.split(','))))))
     elif action == 6:
         await callback.message.edit_text(text='ℹ️ <b>Информация по настройке рассылки группы</b>\n1) Переключи режим активности, чтобы <b>не получать фото</b> / <b>получать фото</b> этой группы\n2) Нажми на кнопку сортировки постов для переключения режимов:\n   <b>по лайкам:</b> в указанном диапазоне будут выбраны <i>n</i> постов с наибольшим количеством лайков\n   <b>по актуальности:</b> будет выбрано <i>n</i> последних постов в указанном диапазоне\n3) <b>Количество фото:</b> выбери, сколько фото ты хочешь получить при одном обращении к группе\n4) <b>Дата поста:</b> здесь тебе нужно выбрать, сколько дней назад должны быть выложены посты. Совет: чем дольше посты лежат на стене, тем больше просмотров и лайков они собирают, поэтому сортировка по лайкам будет работать лучше всего, это также помогает избежать ошибок.\n5) <b>Удалить:</b> полностью удаляет группу из твоего списка',
-                                         reply_markup=group_settings_keyboard(get_group_sets(group_id), True))
+                                         reply_markup=group_settings_keyboard(await get_group_sets(group_id), True))
     elif action == 7:
-        await callback.message.edit_text(text=get_text_of_group_sets(group_id, 1),
+        await callback.message.edit_text(text=await get_text_of_group_sets(group_id, 1),
                                          disable_web_page_preview=True,
-                                         reply_markup=group_settings_keyboard(get_group_sets(group_id)))
+                                         reply_markup=group_settings_keyboard(await get_group_sets(group_id)))
     elif action == 8:
         amount = callback_data.amount
-        change_amount(group_id, amount)
+        await change_amount(group_id, amount)
         await callback.answer(text=str(amount))
-        await callback.message.edit_text(text=get_text_of_group_sets(group_id),
-                                         disable_web_page_preview=True, reply_markup=group_settings_keyboard(get_group_sets(group_id)))
+        await callback.message.edit_text(text=await get_text_of_group_sets(group_id),
+                                         disable_web_page_preview=True, reply_markup=group_settings_keyboard(await get_group_sets(group_id)))
     elif action == 9:
         date = callback_data.date
-        change_date(group_id, date)
-        update_time(group_id, 0)
+        await change_date(group_id, date)
+        await update_time(group_id, 0)
         await callback.answer(text=str(date))
-        await callback.message.edit_text(text=get_text_of_group_sets(group_id),
-                                         disable_web_page_preview=True, reply_markup=group_settings_keyboard(get_group_sets(group_id)))
+        await callback.message.edit_text(text=await get_text_of_group_sets(group_id),
+                                         disable_web_page_preview=True, reply_markup=group_settings_keyboard(await get_group_sets(group_id)))
 
 
 @dp.message(StateFilter(FSMFillForm.inserting_url))
@@ -1350,16 +1217,16 @@ async def get_url_vk(message: Message, state: FSMContext):
         if not valid[0]:
             await message.answer('Ссылка недействительна. Отправь ссылку на группу <b><u>vk.com</u></b>')
         else:
-            group_id = add_group(message.from_user.id, valid[1])
+            group_id = await add_group(message.from_user.id, valid[1])
             if group_id[0] == -1:
-                await message.answer(f'Такая группа уже есть в твоём списке\n\n{get_text_of_group_sets(group_id[1], 1)}', disable_web_page_preview=True, reply_markup=group_settings_keyboard(get_group_sets(group_id[1])))
+                await message.answer(f'Такая группа уже есть в твоём списке\n\n{await get_text_of_group_sets(group_id[1], 1)}', disable_web_page_preview=True, reply_markup=group_settings_keyboard(await get_group_sets(group_id[1])))
                 await state.clear()
                 return
             group_id = group_id[0]
-            group_sets = get_group_sets(group_id)
-            name = get_group_name(valid[1])
+            group_sets = await get_group_sets(group_id)
+            name = await get_group_name(valid[1])
             await message.answer(
-                f'Ты добавил группу <b>{name}</b>\n\nНастройки по умолчанию\n{get_text_of_group_sets(group_id, 0)}',
+                f'Ты добавил группу <b>{name}</b>\n\nНастройки по умолчанию\n{await get_text_of_group_sets(group_id, 0)}',
                 disable_web_page_preview=True, reply_markup=group_settings_keyboard(group_sets))
             await state.clear()
     else:
@@ -1370,17 +1237,17 @@ async def get_caption_group(message: Message, state: FSMContext):
     if not message.text:
         await message.answer('Это не похоже на текст для подписи к пикче, сука русский учи')
         return
-    num, photo_id = caption_global[message.from_user.id]
+    num, photo_id = caption_global.get(message.from_user.id, (0, 0))
     if num == 0:
         await message.answer('Произошла ошибка!')
         return
     caption_global[message.from_user.id] = (0, 0)
-    add_note(num, message.text)
+    await add_note(num, message.text)
     async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
-        await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(num),
+        await bot.send_photo(chat_id=message.from_user.id, photo=await get_photo_id_by_id(num),
                              caption=f'Охуенная заметка: <b><i>{message.text}</i></b>. А теперь оцени фото, мразь',
-                             reply_markup=get_rates_keyboard(num, mailing=3, ids=photo_id, delete=False))
-    previous = get_message_to_delete(message.from_user.id)
+                             reply_markup=await get_rates_keyboard(num, mailing=3, ids=photo_id, delete=False))
+    previous = await get_message_to_delete(message.from_user.id)
     if '-' in previous:
         previous = list(map(int, previous.split('-')))
         msgs_list = [i for i in range(previous[0], previous[-1] + 1)]
@@ -1398,7 +1265,7 @@ async def get_hour_vk(message: Message, state: FSMContext):
             await message.answer('Ты ввел неверное значение часа. Ты не умеешь считать?')
         else:
             hour = int(message.text)
-            minute = get_minute(message.from_user.id)
+            minute = await get_minute(message.from_user.id)
             minute_str = str(minute)
             if minute == 0:
                 minute_str = '00'
@@ -1413,8 +1280,8 @@ async def get_hour_vk(message: Message, state: FSMContext):
             if (hour == 9) and (minute <= 16 and minute >= 5):
                 await message.answer(text=f'<b>Текущее значение минут: {minute_str}</b>. Сервер перезагружается в <u>9:10</u>, тебе лучше выбрать время чуть попозже!')
                 return
-            set_hour(message.from_user.id, str(hour))
-            await message.answer(f'Отлично! Теперь шлюхи будут присылаться в <b>{hour}:{minute_str}</b>. <i>Изменения, будут применены при следующей перезагрузке сервера...</i>', reply_markup=get_notify_keyboard(message.from_user.id))
+            await set_hour(message.from_user.id, str(hour))
+            await message.answer(f'Отлично! Теперь шлюхи будут присылаться в <b>{hour}:{minute_str}</b>. <i>Изменения, будут применены при следующей перезагрузке сервера...</i>', reply_markup=await get_notify_keyboard(message.from_user.id))
             await state.clear()
     else:
         await message.answer('Это не похоже на часовой формат 🤨\nТы не умеешь считать?')
@@ -1428,7 +1295,7 @@ async def get_minute_vk(message: Message, state: FSMContext):
             await message.answer('Ты ввел неверное значение минут')
         else:
             minute = int(message.text)
-            hour = get_hour(message.from_user.id)
+            hour = await get_hour(message.from_user.id)
             if (hour == 6 or hour == 18) and (minute >=55):
                 await message.answer(text=f'<b>Текущее значение часа: {hour}</b>. Сервер перезагружается в <u>{hour + 1}:00</u>, тебе лучше выбрать время чуть пораньше!')
                 return
@@ -1443,10 +1310,10 @@ async def get_minute_vk(message: Message, state: FSMContext):
                 minute_str = '00'
             elif minute < 10:
                 minute_str = '0' + minute_str
-            set_minute(message.from_user.id, minute_str)
+            await set_minute(message.from_user.id, minute_str)
             await message.answer(
                 f'Отлично! Теперь шлюшандры будут присылаться в <b>{hour}:{minute_str}</b>. <i>Изменения, будут применены при следующей перезагрузке сервера...</i>',
-                reply_markup=get_notify_keyboard(message.from_user.id))
+                reply_markup=await get_notify_keyboard(message.from_user.id))
             await state.clear()
     else:
         await message.answer('Это не похоже на минутный формат 🤨\nЧё ебальник разинул?')
@@ -1459,9 +1326,9 @@ async def send_incel_photo(callback: Union[CallbackQuery, None] = None, user_id:
     else:
         username = 0
     try:
-        q = get_queue(user_id)
+        q = await get_queue(user_id)
         if q is None or len(q) == 0:
-            add_current_state(user_id, 0, username)
+            await add_current_state(user_id, 0, username)
             if callback:
                 await callback.message.delete()
             else:
@@ -1469,39 +1336,41 @@ async def send_incel_photo(callback: Union[CallbackQuery, None] = None, user_id:
             return
 
         i = min(q)
-        media = InputMediaPhoto(media=get_photo_id_by_id(i))
-        reply_markup = get_rates_keyboard(num=i, mailing=1)
+        media = InputMediaPhoto(media=await get_photo_id_by_id(i))
+        reply_markup = await get_rates_keyboard(num=i, mailing=1)
 
         if callback:
             async with ChatActionSender(bot=bot, chat_id=user_id, action='upload_photo'):
                 await callback.message.edit_media(media=media, reply_markup=reply_markup)
         else:
-            await bot.send_photo(user_id, get_photo_id_by_id(i), reply_markup=reply_markup)
+            await bot.send_photo(user_id, await get_photo_id_by_id(i), reply_markup=reply_markup)
 
-        add_current_state(user_id, i, username)
+        await add_current_state(user_id, i, username)
 
     except Exception as e:
         error_text = f'Произошла ошибка! Пользователь {username if username != 0 else "id:"} ({user_id}) не получил фото из очереди.\n{e}'
         if not 'specified new message content and reply markup are exactly the same' in str(e):
             await bot.send_message(chat_id=972753303, text=error_text)
             if 'wrong type of the web page content' in str(e):
-                num = min(get_queue(user_id))
+                num = min(await get_queue(user_id))
                 await bot.send_message(chat_id=972753303, text=f'Фотка #{num} была удалена из очереди')
-                delete_from_queue(user_id, num)
+                await delete_from_queue(user_id, num)
 
 
 async def download_hash(num=1, link=None):
-    path = f"image_{random.randint(1, 10 ** 8)}.jpg"
+    path = f"{os.path.dirname(__file__)}/pictures/image_{random.randint(1, 10 ** 8)}.jpg"
     if link:
         value = link
     else:
-        value = get_photo_id_by_id(num)
+        value = await get_photo_id_by_id(num)
     if value[:4] == 'http':
         try:
-            response = requests.get(value)
-            if response.status_code == 200:
-                with open(path, "wb") as file:
-                    file.write(response.content)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(value) as response:
+                    if response.status == 200:
+                        async with aiofiles.open(path, "wb") as file:
+                            content = await response.read()
+                            await file.write(content)
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 6666\n{e}')
     else:
@@ -1510,7 +1379,7 @@ async def download_hash(num=1, link=None):
         await bot.download_file(f_path, path)
     try:
         hash = get_hash(path)
-        add_to_weekly(value, None, hash)
+        await add_to_weekly(value, None, hash)
         os.remove(path)
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 7777\n{e}')
@@ -1519,7 +1388,7 @@ async def download_hash(num=1, link=None):
 @dp.callback_query(RateCallBack.filter())
 async def filter_rates(callback: CallbackQuery,
                        callback_data: RateCallBack, state: FSMContext):
-    if not check_id(callback.from_user.id, callback.from_user.username)[0]:
+    if not (await check_id(callback.from_user.id, callback.from_user.username))[0]:
         await state.set_state(FSMFillForm.banned)
         await callback.message.delete()
         await callback.answer('Ты заблокирован!')
@@ -1527,68 +1396,71 @@ async def filter_rates(callback: CallbackQuery,
     num = callback_data.photo_id
     mailing = callback_data.mailing
     if mailing == 2:
-        last_rate = get_rate(num, callback.from_user.id)
+        last_rate = await get_rate(num, callback.from_user.id)
     else:
         await callback.answer(text=rate[callback_data.r])
-    votes = get_votes(num)
+    votes = await get_votes(num)
     photo_is_not_posted = True
-    insert_last_rate(callback.from_user.id, num)
+    await insert_last_rate(callback.from_user.id, num)
     global incels
-    incels = get_users()
-    if mailing == 1 and {get_id_by_username(i) for i in votes.keys() if get_id_by_username(i) in incels} == incels:
+    incels = await get_users()
+    if mailing == 1 and {await get_id_by_username(i) for i in votes.keys() if await get_id_by_username(i) in incels} == incels:
         photo_is_not_posted = False  # индикатор, который отвечает за публикацию поста в канал (для того чтобы после изменения оценки пост не выложился еще раз)
-    add_rate(num, callback.from_user.username, callback_data.r)
-    delete_from_queue(callback.from_user.id, num)
-    last_upd = get_last_upd(callback.from_user.id)
+    await add_rate(num, callback.from_user.username, callback_data.r)
+    await delete_from_queue(callback.from_user.id, num)
+    last_upd = await get_last_upd(callback.from_user.id)
     current_time = int(time.time())
     if current_time - last_upd <= 60:
-        increment_time(callback.from_user.id, current_time - last_upd, current_time)
+        await increment_time(callback.from_user.id, current_time - last_upd, current_time)
     else:
-        increment_time(callback.from_user.id, 1, current_time)
+        await increment_time(callback.from_user.id, 1, current_time)
     if mailing == 1:
         try:
-            votes = get_votes(num)
-            if len(votes.keys()) + 1 == len(get_users()):
+            votes = await get_votes(num)
+            if len(votes.keys()) + 1 == len(await get_users()):
                 voted = set(votes.keys())
                 users = set()
-                for i in get_users():
-                    users.add(get_username_by_id(i))
+                for i in await get_users():
+                    users.add(await get_username_by_id(i))
                 last_username = next(iter((users - voted)))
                 if last_username and isinstance(last_username, str) and len(last_username) > 0:
-                    user_id = get_id_by_username(last_username)
+                    user_id = await get_id_by_username(last_username)
                     if user_id and (last_username not in states_users or states_users[last_username] + datetime.timedelta(
                             hours=1) < datetime.datetime.now()):
-                        add_afk(user_id)
+                        await add_afk(user_id)
                         await bot.send_message(
                             text=f'<b>{last_username}</b>, ебать твой рот, нажми на кнопку, ты последний такой хуесос 😡',
                             chat_id=user_id)
                         states_users[last_username] = datetime.datetime.now()
 
-            if len(votes.keys()) >= len(get_users()) and photo_is_not_posted:
-                photo_id = get_photo_id_by_id(num)
-                note_str_origin = get_note_sql(num)
+            if len(votes.keys()) >= len(await get_users()) and photo_is_not_posted:
+                photo_id = await get_photo_id_by_id(num)
+                note_str_origin = await get_note_sql(num)
                 if note_str_origin is None or '/anon' not in note_str_origin:
-                    add_to_queue_public_info(num)
+                    await add_to_queue_public_info(num)
                 avg = sum(votes.values()) / len(votes.keys())
                 value = photo_id
-                if value[:4]=='http':
+                path_local = f"{os.path.dirname(__file__)}/pictures/image_{random.randint(1, 10 ** 8)}.jpg"
+                if value[:4] == 'http':
                     try:
-                        response = requests.get(value)
-                        if response.status_code == 200:
-                            with open("image_N.jpg", "wb") as file:
-                                file.write(response.content)
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(value) as response:
+                                if response.status == 200:
+                                    async with aiofiles.open(path_local, "wb") as file:
+                                        content = await response.read()
+                                        await file.write(content)
                     except Exception as e:
                         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 1453\n{e}')
                 else:
                     f = await bot.get_file(value)
                     f_path = f.file_path
-                    await bot.download_file(f_path, "image_N.jpg")
+                    await bot.download_file(f_path, path_local)
                 try:
-                    hash = get_hash("image_N.jpg")
-                    add_to_weekly(photo_id, avg, hash)
-                    os.remove("image_N.jpg")
+                    hash = get_hash(path_local)
+                    await add_to_weekly(photo_id, avg, hash)
+                    os.remove(path_local)
                 except Exception:
-                    add_to_weekly(photo_id, avg)
+                    await add_to_weekly(photo_id, avg)
                 avg_str = '{:.2f}'.format(avg)
                 extra = ''
                 spoiler = False
@@ -1604,17 +1476,17 @@ async def filter_rates(callback: CallbackQuery,
                 rounded = round(avg)
                 for key, value in sorted_rates:
                     if value == rounded:
-                        add_hit(get_id_by_username(key), 1)
+                        await add_hit(await get_id_by_username(key), 1)
                     else:
-                        add_hit(get_id_by_username(key))
-                    user_id = get_id_by_username(key)
+                        await add_hit(await get_id_by_username(key))
+                    user_id = await get_id_by_username(key)
                     if user_id:
-                        add_rate_to_avg(user_id, value)
+                        await add_rate_to_avg(user_id, value)
                     user_rates += f'@{key}: <i>{value}</i>\n'
 
                 note_str = f': <blockquote>{note_str_origin.replace("/anon", "").strip()}</blockquote>\n' if note_str_origin else '\n\n'
-                name = get_origin(num)
-                name = '@' + name if name[0] != '👥' else f'👥 <a href="vk.com/{name[2:]}">{get_group_name(name[:name.find("?")][2:])}</a>'
+                name = await get_origin(num)
+                name = '@' + name if name[0] != '👥' else f'👥 <a href="vk.com/{name[2:]}">{await get_group_name(name[:name.find("?")][2:])}</a>'
                 txt = extra + f'Автор пикчи <b>{name}</b>' + note_str + "Оценки инцелов:\n" + user_rates + '\n' f'Общая оценка: <b>{avg_str}</b>' + f'\n<i>#{rate2[rounded].replace(" ", "_")}</i>'
                 await bot.send_photo(chat_id=channel_id, photo=photo_id, caption=txt,
                                      has_spoiler=spoiler)
@@ -1624,13 +1496,14 @@ async def filter_rates(callback: CallbackQuery,
         return
     elif mailing == 2:
         if last_rate != callback_data.r:
-            add_overshoot(callback.from_user.id)
+            await add_overshoot(callback.from_user.id)
+            await callback.answer(text=rate[callback_data.r])
         else:
             await callback.answer('🤨 В сохраненки кинул, онанист чёртов???')
         await callback.message.delete()
         return
     elif mailing == 3:
-        previous = get_message_to_delete(callback.from_user.id)
+        previous = await get_message_to_delete(callback.from_user.id)
         await send_next_photo(callback.from_user.id)
         await callback.message.delete()
         await send_photo_to_users(callback.from_user.id, num)
@@ -1641,11 +1514,11 @@ async def filter_rates(callback: CallbackQuery,
         await download_hash(num)
         return
     elif mailing == 4:
-        rate_loc = get_not_incel_rate(num)
+        rate_loc = await get_not_incel_rate(num)
         if rate_loc == -1:
             rate_loc = callback_data.r + round(random.uniform(-1, 1), 2)
             rate_loc = max(0, min(10, rate_loc))
-            add_rate_not_incel(num, rate_loc)
+            await add_rate_not_incel(num, rate_loc)
             await send_results(num, rate_loc)
 
     await download_hash(num)
@@ -1663,9 +1536,9 @@ async def confirm_photo_filter(callback: CallbackQuery,
     if action == 0:
         await callback.message.edit_text('⛔️ Поймали в последний момент.\nОтправка фото отменена')
     elif action == 1:
-        note = get_note_sql(photo_id)
+        note = await get_note_sql(photo_id)
         note = '' if note is None else f'"{note}"'
-        await bot.send_photo(972753303, photo=get_photo_id_by_id(photo_id),
+        await bot.send_photo(972753303, photo=await get_photo_id_by_id(photo_id),
                              caption=f'Фото от пользователя <i>@{callback.from_user.username}</i>\n<i>{note}</i>',
                              reply_markup=moderate_keyboard(photo_id, callback.from_user.username))
         await callback.message.edit_text("😎 Твоё фото добавлено в очередь")
@@ -1683,13 +1556,13 @@ async def moderate_photo(callback: CallbackQuery,
         await callback.answer(text='🔕')
     await callback.message.edit_reply_markup(reply_markup=None)
     if action == 0:
-        creator_id = get_id_by_username(creator)
+        creator_id = await get_id_by_username(creator)
         if creator_id:
             try:
-                add_rate_not_incel(photo_id, -2)
-                await bot.send_photo(chat_id=creator_id, photo=get_photo_id_by_id(photo_id),
+                await add_rate_not_incel(photo_id, -2)
+                await bot.send_photo(chat_id=creator_id, photo=await get_photo_id_by_id(photo_id),
                                      caption=replicas['reject'],
-                                     reply_markup=get_keyboard(creator_id))
+                                     reply_markup=await get_keyboard(creator_id))
             except Exception as e:
                 await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 8\n{str(e)}')
         await callback.message.answer(text=f'<b>Забанить долбоеба?</b>\n<i>@{creator}</i>',
@@ -1704,13 +1577,13 @@ async def moderate_photo(callback: CallbackQuery,
         #     except Exception as e:
         #         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка!\n{str(e)}')
         await callback.message.answer(text='Оцени это фото',
-                                      reply_markup=get_rates_keyboard(photo_id, 4))
+                                      reply_markup=await get_rates_keyboard(photo_id, 4))
     elif action == 3:
-        creator_id = get_id_by_username(creator)
+        creator_id = await get_id_by_username(creator)
         if creator_id is None:
             await callback.message.edit_text(text=f'Строка с username: <i>"{creator}"</i> не найдена в таблице')
             return
-        result = get_ban(creator_id)
+        result = await get_ban(creator_id)
         if result == 0:
             await callback.message.edit_text(text=f'Строка с username: <i>"{creator}"</i> не найдена в таблице')
         else:
@@ -1718,10 +1591,10 @@ async def moderate_photo(callback: CallbackQuery,
                                              reply_markup=None)
             await bot.send_message(chat_id=creator_id, text='🔫 C этого момента ты в бане')
     elif action == 4:
-        rate_loc = get_not_incel_rate(photo_id)
+        rate_loc = await get_not_incel_rate(photo_id)
         if rate_loc == -1:
             rate_loc = round(random.uniform(3, 7), 2)
-            add_rate_not_incel(photo_id, rate_loc)
+            await add_rate_not_incel(photo_id, rate_loc)
             await send_results(photo_id, str(rate_loc))
     else:
         await callback.message.edit_text(text=f'Пощадим его', reply_markup=None)
@@ -1732,9 +1605,9 @@ async def moderate_photo(callback: CallbackQuery,
 async def process_start_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
     username = message.from_user.username
-    result = check_id(user_id, username)
+    result = await check_id(user_id, username)
     if result[0]:
-        await message.answer('Нахуя ты старт нажал? Если для теста, извиняюсь, хотя похуй. Иди нахуй!', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer('Нахуя ты старт нажал? Если для теста, извиняюсь, хотя похуй. Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
         await state.set_state(FSMFillForm.verified)
     else:
         if result[1] <= 0   :
@@ -1743,7 +1616,7 @@ async def process_start_command(message: Message, state: FSMContext):
             await state.set_state(FSMFillForm.banned)
             return
 
-        await message.answer(replicas['hi'].replace('$', '"'), disable_web_page_preview=True, reply_markup=get_keyboard(user_id))
+        await message.answer(replicas['hi'].replace('$', '"'), disable_web_page_preview=True, reply_markup=await get_keyboard(user_id))
 
         #await message.answer_sticker(sticker='CAACAgIAAxkBAAELD9NljoEHEI6ehudWG_Cql5PXBwMw-AACSCYAAu2TuUvJCvMfrF9irTQE', reply_markup=not_incel_keyboard)
 
@@ -1757,21 +1630,21 @@ async def message_reaction_handler(message_reaction: MessageReactionUpdated):
 
 @dp.message(Command(commands='password_yaincel'))
 async def password_yaincel(message: Message, state: FSMContext):
-    set_verified(message.from_user.id)
-    await message.answer(text='Поздравляю, ты теперь в нашей банде инцелов!', reply_markup=get_keyboard(message.from_user.id))
+    await set_verified(message.from_user.id)
+    await message.answer(text='Поздравляю, ты теперь в нашей банде инцелов!', reply_markup=await get_keyboard(message.from_user.id))
     await state.set_state(FSMFillForm.verified)
 
 
 @dp.message(Command(commands='anon'), ~F.photo)
 async def anon(message: Message, state: FSMContext):
-    await message.answer(text='А фоточка? 🥺', reply_markup=get_keyboard(message.from_user.id))
+    await message.answer(text='А фоточка? 🥺', reply_markup=await get_keyboard(message.from_user.id))
 
 
 @dp.message(Command(commands='clear_admin_queues'))
 async def clear_admin_queues_command(message: Message, state: FSMContext):
     try:
-        for user in get_admins():
-            remove_from_admins_queue(user, 0)
+        for user in await get_admins():
+            await remove_from_admins_queue(user, 0)
     except Exception as e:
         await message.answer(text=f'Произошла ошибка! Код 400\n{e}')
     await message.answer('Очереди были очищены')
@@ -1779,30 +1652,30 @@ async def clear_admin_queues_command(message: Message, state: FSMContext):
 
 @dp.message(Command(commands='help'))
 async def help(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
+    result = await check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
-        await message.answer(replicas['help'].replace('$', '"'), disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(replicas['help'].replace('$', '"'), disable_web_page_preview=True, reply_markup=await get_keyboard(message.from_user.id))
         async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_video'):
-            await message.answer_video(video=FSInputFile(path='guide.mp4'))
+            await message.answer_video(video=FSInputFile(path=f'{os.path.dirname(__file__)}/asset/guide.mp4'))
         return
     await message.answer(
         text='Просто скинь мне любое фото, и оно будет отправлено всем участникам <a href="https://t.me/+D_c0v8cHybY2ODQy">банды инцелов</a>.\nКнопка "Статистика 📊" покажет тебе график всех средних значений оценок твоих фото.\n' + \
              'Отправил оценку ошибочно? Тогда нажми кнопку "Изменить последнюю оценку ✏️".\nЕсли ты хочешь добавить заметку к фото, сделай подпись к ней и отправь мне, она будет показана в канале по окончании голосования\n\n<span class="tg-spoiler">/quote — случайная цитата</span>',
-        disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
+        disable_web_page_preview=True, reply_markup=await get_keyboard(message.from_user.id))
     async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_video'):
-        await message.answer_video(video=FSInputFile(path='guide.mp4'))
+        await message.answer_video(video=FSInputFile(path=f'{os.path.dirname(__file__)}/asset/guide.mp4'))
 
 
 @dp.message(Command(commands='info'))
 async def info(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
-    await message.answer(replicas['info'].replace('$', ''), disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
+    result = await check_id(message.from_user.id, message.from_user.username)
+    await message.answer(replicas['info'].replace('$', ''), disable_web_page_preview=True, reply_markup=await get_keyboard(message.from_user.id))
 
 
 @dp.message(Command(commands='about'))
 async def about(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
-    await message.answer(replicas['about'].replace('$', ''), disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
+    result = await check_id(message.from_user.id, message.from_user.username)
+    await message.answer(replicas['about'].replace('$', ''), disable_web_page_preview=True, reply_markup=await get_keyboard(message.from_user.id))
 
 
 def format_caption(text):
@@ -1869,8 +1742,8 @@ async def process_more_press(callback: CallbackQuery):
 
 @dp.message(Command(commands='get_users'), F.from_user.id.in_(incels))
 async def send_clear_users_db(message: Message):
-    incels = get_users()
-    db = get_usersinfo_db()
+    incels = await get_users()
+    db = await get_usersinfo_db()
     if db is None:
         await message.answer(text='БД пуста!')
         return
@@ -1915,85 +1788,85 @@ async def send_clear_users_db(message: Message):
         await message.answer(text=f'Произошла ошибка!\n{e}')
 
 
-@dp.message(Command(commands='clear_queue'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='clear_queue'), F.from_user.id.in_(incels))
 async def clear_queue(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='Иди нахуй!')
     else:
         try:
-            for user in get_users():
-                delete_from_queue(id=user)
-                add_current_state(id=user, num=0)
+            for user in await get_users():
+                await delete_from_queue(id=user)
+                await add_current_state(id=user, num=0)
             await message.answer(text='Очереди очищены 🫡')
         except Exception as e:
             await message.answer(text=f'Произошла ошибка! Код 10\n{e}')
 
 
-@dp.message(Command(commands='upd_groupnames'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='upd_groupnames'), F.from_user.id.in_(incels))
 async def upd_groupnames(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='Иди нахуй!')
     else:
-        update_groupnames()
+        await update_groupnames()
         await message.answer('Названия групп обновлены!')
 
 
 
-@dp.message(Command(commands='clear_states'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='clear_states'), F.from_user.id.in_(incels))
 async def clear_state(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='Иди нахуй!')
     else:
         try:
-            for user in get_users():
-                add_current_state(id=user, num=0)
+            for user in await get_users():
+                await add_current_state(id=user, num=0)
             await message.answer(text='Состояния очищены 🫡')
         except Exception as e:
             await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
 
 
-@dp.message(Command(commands='backup'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='backup'), F.from_user.id.in_(incels))
 async def backup_files(message: Message):
     try:
         async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_document'):
-            doc = InputMediaDocument(media=FSInputFile("slutsDB.db"))
-            doc2 = InputMediaDocument(media=FSInputFile("usersDB.db"))
-            doc3 = InputMediaDocument(media=FSInputFile("weekly.db"))
-            doc4 = InputMediaDocument(media=FSInputFile("weekly_info.db"))
-            doc5 = InputMediaDocument(media=FSInputFile("admins.db"))
-            doc6 = InputMediaDocument(media=FSInputFile("emoji.db"))
-            doc7 = InputMediaDocument(media=FSInputFile("statham.db"),
+            doc = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/slutsDB.db"))
+            doc2 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/usersDB.db"))
+            doc3 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/weekly.db"))
+            doc4 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/weekly_info.db"))
+            doc5 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/admins.db"))
+            doc6 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/emoji.db"))
+            doc7 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/statham.db"),
                                       caption=f'Бэкап <i>{datetime.datetime.now().date()}</i>')
             await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5, doc6, doc7], chat_id=message.chat.id)
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! При отправке файлов для бэкапа.\n{e}')
 
 
-@dp.message(Command(commands='god_mode'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='god_mode'), F.from_user.id.in_(incels))
 async def god_mode(message: Message):
     if message.from_user.id == 972753303:
-        set_admin(972753303)
-        await message.answer(text='С возвращением!', reply_markup=get_keyboard(972753303))
+        await set_admin(972753303)
+        await message.answer(text='С возвращением!', reply_markup=await get_keyboard(972753303))
 
 
-@dp.message(Command(commands='chill_mode'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='chill_mode'), F.from_user.id.in_(incels))
 async def chill_mode_lol(message: Message):
     if message.from_user.id == 972753303:
-        chill_mode(972753303)
-        await message.answer(text='Почилль, дружище!', reply_markup=get_keyboard(972753303))
+        await set_admin_mode(972753303, 2)
+        await message.answer(text='Почилль, дружище!', reply_markup=await get_keyboard(972753303))
 
 
-@dp.message(Command(commands='default_mode'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='default_mode'), F.from_user.id.in_(incels))
 async def default_mode_lol(message: Message):
     if message.from_user.id == 972753303:
-        default_mode(972753303)
-        await message.answer(text='Включен режим модерации', reply_markup=get_keyboard(972753303))
+        await set_admin_mode(972753303, 1)
+        await message.answer(text='Включен режим модерации', reply_markup=await get_keyboard(972753303))
 
 
 
-@dp.message(Command(commands='get_users_info_db'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='get_users_info_db'), F.from_user.id.in_(incels))
 async def send_users_db(message: Message):
-    db = get_usersinfo_db()
+    db = await get_usersinfo_db()
     if db is None:
         await message.answer(text='БД пуста')
         return
@@ -2003,7 +1876,7 @@ async def send_users_db(message: Message):
         await message.answer(text=txt[i * 4096:(i + 1) * 4096])
 
 
-@dp.message(Command(commands='avgs'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='avgs'), F.from_user.id.in_(incels))
 async def send_avgs(message: Message):
     def center_string(s, total_length):
         s = str(s)
@@ -2016,14 +1889,14 @@ async def send_avgs(message: Message):
 
         return "<code>" + " " * left_spaces + s + " " * right_spaces + "</code>"
 
-    txt = '<b>Средние значения</b>\n'
+    txt = '<b>Характеристики</b>\n'
     mx_len_username = 0
     averages, overshoot, hit, afk = {}, {}, {}, {}
     for user in incels:
-        username = get_username_by_id(user)
+        username = await get_username_by_id(user)
         if len(username) > mx_len_username:
             mx_len_username = len(username)
-        average_tuple = get_avg_stats(user)
+        average_tuple = await get_avg_stats(user)
         if average_tuple is None:
             averages[username] = afk[username] = overshoot[username] = 0
             hit[username] = '0.00%'
@@ -2033,7 +1906,7 @@ async def send_avgs(message: Message):
             hit[username] = f'{"{:.1f}".format(average_tuple[4] / average_tuple[5] * 100)}%'
             afk[username] = average_tuple[6]
     averages = sorted(averages.items(), key=lambda x: x[1], reverse=True)
-    txt = f'<code>{"Incel".ljust(mx_len_username)}  </code>   <b>AVG    👟➔👠     🎯      AFK</b>\n'
+    txt += f'<code>{"".ljust(mx_len_username)}  </code>   <b>AVG    👟➔👠<code>   🎯   ⠀</code>AFK</b>\n'
     hidden_space = '<code> </code>'
     for username, avg in averages:
         if avg is None:
@@ -2042,18 +1915,18 @@ async def send_avgs(message: Message):
             overshoot[username] = f'{overshoot[username] // 1000}к'
         if afk[username] >= 10 ** 4:
             afk[username] = f'{afk[username] // 1000}к'
-        txt += f'<code>@{username.ljust(mx_len_username)}</code> | <b>{"{:.4f}".format(avg)}</b> |{center_string(overshoot[username], 5)}|{center_string(hit[username], 6)}|<code>{str(afk[username]).rjust(4)}</code>\n'
-    await message.answer(txt, reply_markup=get_keyboard(message.from_user.id))
+        txt += f'<code>@{username.ljust(mx_len_username)}</code>┃{"{:.4f}".format(avg)}│{center_string(overshoot[username], 5)}│{center_string(hit[username], 6)}│<code>{str(afk[username]).rjust(4)}</code>\n'
+    await message.answer(txt, reply_markup=await get_keyboard(message.from_user.id))
 
 
-@dp.message(Command(commands='queue'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='queue'), F.from_user.id.in_(incels))
 async def get_queue_rates(message: Message):
-    db = get_usersinfo_db()
+    db = await get_usersinfo_db()
     if db is None:
-        await message.answer(text='БД пуста', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text='<b>БД пуста</b>', reply_markup=await get_keyboard(message.from_user.id))
         return
     db_incel = [i for i in db if i[3]]
-    txt = ''
+    txt = '<b>Фото в очереди</b>\n'
     mx_len_username = 0
     for incel_loc in db_incel:
         if len(incel_loc[1]) > mx_len_username:
@@ -2062,47 +1935,47 @@ async def get_queue_rates(message: Message):
     db_incel = sorted(db_incel, key=lambda x: len(x[-2].split(',')) if x[-2] else 0, reverse=True)
 
     for incel_loc in db_incel:
-        admin_str = ''
-        if incel_loc[0] in get_admins():
-            admin_queue_len = len(get_admins_queue(incel_loc[0]))
-            admin_str = f'{"" if admin_queue_len == 0 else f" / <b>{admin_queue_len}</b>"}'
+        admin_str = ""
+        if incel_loc[0] in await get_admins():
+            admin_queue_len = len(await get_admins_queue(incel_loc[0]))
+            admin_str = f'{"" if admin_queue_len == 0 else f"│{admin_queue_len}"}'
         if incel_loc[-2] is None:
             queue = '✅'
         else:
-            queue = f"В очереди <b>{len(incel_loc[-2].split(','))}</b>"
+            queue = f"{len(incel_loc[-2].split(','))}"
             cnt += 1
-        line = f'<code>@{incel_loc[1].ljust(mx_len_username)}</code> | {queue}{admin_str}\n'
+        line = f'<code>@{incel_loc[1].ljust(mx_len_username)}</code>┃{queue}{admin_str}\n'
         txt += line
-    txt += f'<blockquote>Итого ублюдков: <b>{cnt}</b></blockquote>'
-    await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
+    txt += f'\n<i>Итого ублюдков: <b>{cnt}</b></i>'
+    await message.answer(text=txt, reply_markup=await get_keyboard(message.from_user.id))
 
 
-@dp.message(Command(commands='public_queue'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='public_queue'), F.from_user.id.in_(incels))
 async def get_queue_rates(message: Message):
     try:
-        queue_length = public_queue()
-        await message.answer(text=f'В очереди запоститься: <b>{queue_length}</b>', reply_markup=get_keyboard(message.from_user.id))
+        queue_length = await public_queue()
+        await message.answer(text=f'<b>Очередь публикации</b>\n<code>@rateimage</code>┃{queue_length}', reply_markup=await get_keyboard(message.from_user.id))
     except Exception as e:
-        await message.answer(text=f'Произошла ошибка!\n{e}', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text=f'Произошла ошибка!\n{e}', reply_markup=await get_keyboard(message.from_user.id))
 
 
-@dp.message(Command(commands='wasted_time'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='wasted_time'), F.from_user.id.in_(incels))
 async def get_queue_rates(message: Message):
     txt = '<b>Проёбано времени</b>\n'
     mx_len_username = 0
     wasted = {}
     for user in incels:
-        username = get_username_by_id(user)
-        wasted[username] = get_avg_stats(user)[8]
+        username = await get_username_by_id(user)
+        wasted[username] = (await get_avg_stats(user))[8]
         if len(username) > mx_len_username:
             mx_len_username = len(username)
     wasted = sorted(wasted.items(), key=lambda x: x[1], reverse=True)
     for user, w_time in wasted:
-        txt += f'<code>@{user.ljust(mx_len_username)}</code> | {convert_unix_time(w_time)}\n'
-    await message.answer(txt, reply_markup=get_keyboard(message.from_user.id))
+        txt += f'<code>@{user.ljust(mx_len_username)}</code>┃{convert_unix_time(w_time)}\n'
+    await message.answer(txt, reply_markup=await get_keyboard(message.from_user.id))
 
 
-@dp.message(Command(commands='remove_quote'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='remove_quote'), F.from_user.id.in_(incels))
 async def remove_quote(message: Message):
     if len(message.text) <= len('remove_quote') + 2:
         await message.answer(text='Произошла ошибка!')
@@ -2115,7 +1988,7 @@ async def remove_quote(message: Message):
         await message.answer(text='Произошла ошибка!')
 
 
-@dp.message(Command(commands='get_statham_db'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='get_statham_db'), F.from_user.id.in_(incels))
 async def send_statham_db(message: Message):
     db = get_statham_db()
     if db is None or len(db) == 0:
@@ -2127,10 +2000,10 @@ async def send_statham_db(message: Message):
         await message.answer(text=txt[i * 4096:(i + 1) * 4096])
 
 
-@dp.message(Command(commands='getcoms'), F.from_user.id.in_(get_users()))
+@dp.message(Command(commands='getcoms'), F.from_user.id.in_(incels))
 async def get_all_commands(message: Message):
-    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/public_queue\n/getcoms\n/amogus\n/pepe\n/about'
-    await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
+    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topsync_get_users()\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/public_queue\n/getcoms\n/amogus\n/pepe\n/about'
+    await message.answer(text=txt, reply_markup=await get_keyboard(message.from_user.id))
 
 
 @dp.message(Command(commands='get_weekly_db'))
@@ -2138,7 +2011,7 @@ async def send_weekly_db(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='Иди нахуй!')
     else:
-        db = get_weekly_db_info()
+        db = await get_weekly_db_info()
         if db is None:
             await message.answer(text='БД пуста')
             return
@@ -2152,7 +2025,7 @@ async def weekly_cancel_func(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='Иди нахуй!')
     else:
-        weekly_cancel(message.from_user.id)
+        await weekly_cancel(message.from_user.id)
         await message.answer(text='Еженедельная рассылка тир листа отключена')
 
 
@@ -2161,13 +2034,13 @@ async def send_users_db_func(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='иди нахуй')
     else:
-        weekly_resume(message.from_user.id)
+        await weekly_resume(message.from_user.id)
         await message.answer(text='Еженедельная рассылка тир листа возобновлена')
 
 
 @dp.message(Command(commands='get_ban'))
 async def ban_user(message: Message, state: FSMContext):
-    get_ban(message.from_user.id)
+    await get_ban(message.from_user.id)
     await message.answer(text='Ты исключен из банды инцелов, насколько ты плох? Режим милой тяночки включён', reply_markup=ReplyKeyboardRemove())
     await state.set_state(FSMFillForm.banned)
 
@@ -2177,10 +2050,10 @@ async def send_sluts_db(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='Иди нахуй!')
     else:
-        if get_sluts_db() is None:
+        if await get_sluts_db() is None:
             await message.answer(text='БД пуста')
             return
-        txt = map(str, get_sluts_db())
+        txt = map(str, await get_sluts_db())
         txt = '\n'.join(txt)
         for i in range((len(txt) + 4096) // 4096):
             await message.answer(text=txt[i * 4096:(i + 1) * 4096])
@@ -2191,7 +2064,7 @@ async def send_latest_sluts_db(message: Message):
     if message.from_user.id != 972753303:
         await message.answer(text='Иди нахуй!')
     else:
-        sluts_list = get_sluts_db()
+        sluts_list = await get_sluts_db()
         if sluts_list is None:
             await message.answer(text='БД пуста')
             return
@@ -2229,21 +2102,21 @@ async def insert_new_quote(message: Message, state: FSMContext):
 
 @dp.message(F.text == 'яинцел')
 async def get_verified(message: Message, state: FSMContext):
-    set_verified(id=message.from_user.id)
+    await set_verified(id=message.from_user.id)
     await message.answer(
         text='<b>Привет, уёбище!</b>\nТеперь ты в нашей банде. Просто пришли мне фото, и его смогут оценить все участники. Если ты хочешь добавить заметку, сделай подпись к фото и отправь мне, она будет показана в <b><a href="https://t.me/+D_c0v8cHybY2ODQy">канале</a></b> по окончании голосования. Также тебе будут присылаться фото от других пользователей для оценки. Не забудь добавить <b>/anon</b>, если не хочешь, чтобы фото попало в <b><a href="https://t.me/rateimage">публичный канал</a></b>',
-        disable_web_page_preview=True, reply_markup=get_keyboard(message.from_user.id))
+        disable_web_page_preview=True, reply_markup=await get_keyboard(message.from_user.id))
     await state.set_state(FSMFillForm.verified)
 
 
 @dp.message(F.photo, StateFilter(FSMFillForm.sending_photo))
 async def get_photo_by_button(message: Message, state: FSMContext):
     file_id = message.photo[-1].file_id
-    last_num = get_last()
-    add_photo_id(last_num + 1, file_id, message.from_user.username)
-    add_girlphoto(message.from_user.id, last_num + 1)
+    last_num = await get_last()
+    await add_photo_id(last_num + 1, file_id, message.from_user.username)
+    await add_girlphoto(message.from_user.id, last_num + 1)
     await message.answer(text='Оцени фото, которое ты скинул!',
-                         reply_markup=get_rates_keyboard(last_num + 1, 0))
+                         reply_markup=await get_rates_keyboard(last_num + 1, 0))
     await state.clear()
 
 
@@ -2251,7 +2124,7 @@ async def get_photo_by_button(message: Message, state: FSMContext):
 async def cancel_sending(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(text='Ты вышел из меню отправки фото')
-    add_current_state(message.from_user.id, 0, message.from_user.username)
+    await add_current_state(message.from_user.id, 0, message.from_user.username)
 
 
 @dp.message(~F.photo, StateFilter(FSMFillForm.sending_photo))
@@ -2260,14 +2133,14 @@ async def invalid_type_photo(message: Message, state: FSMContext):
 
 
 async def send_photo_to_users(origin_user, num: int):
-    for user in get_users():
+    for user in await get_users():
         if user == origin_user:
             continue
-        add_to_queue(user, num)
-        if get_current_state(user) != 0:
+        await add_to_queue(user, num)
+        if await get_current_state(user) != 0:
             continue
-        add_current_state(user, num)
-        await bot.send_photo(user, get_photo_id_by_id(num), reply_markup=get_rates_keyboard(num=num, mailing=1))
+        await add_current_state(user, num)
+        await bot.send_photo(user, await get_photo_id_by_id(num), reply_markup=await get_rates_keyboard(num=num, mailing=1))
         states_users[user] = datetime.datetime.now()
 
 
@@ -2287,7 +2160,7 @@ async def send_photo_to_users(origin_user, num: int):
 
 @dp.message(F.text == 'Разослать фото')
 async def send_photo(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
+    result = await check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
         if result[1] == -1:
             await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
@@ -2307,7 +2180,7 @@ async def remember_to_rate(message: Message, state: FSMContext):
 
 @dp.message(F.photo, ~StateFilter(FSMFillForm.sendDM))
 async def default_photo(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
+    result = await check_id(message.from_user.id, message.from_user.username)
     file_id = message.photo[-1].file_id
     if not result[0]:
         if result[1] == -1:
@@ -2315,15 +2188,15 @@ async def default_photo(message: Message, state: FSMContext):
                                  reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
-        min_num = get_min()
-        add_photo_id(min_num - 1, file_id, message.from_user.username)
-        add_girlphoto(message.from_user.id, min_num - 1)
+        min_num = await get_min()
+        await add_photo_id(min_num - 1, file_id, message.from_user.username)
+        await add_girlphoto(message.from_user.id, min_num - 1)
         caption = '' if message.caption is None else message.caption
         if caption != '':
-            add_note(min_num - 1, message.caption)
+            await add_note(min_num - 1, message.caption)
 
         try:
-            if check_new_user(message.from_user.id):
+            if await check_new_user(message.from_user.id):
                 await message.answer(replicas['warning'])
             note = '' if (message.caption is None or message.caption.replace('/anon', '').strip() == '') else f'\nПодпись: <i>"{message.caption.replace("/anon", "")}"</i>'
             if message.caption is None or '/anon' not in message.caption:
@@ -2337,17 +2210,36 @@ async def default_photo(message: Message, state: FSMContext):
         return
     if await already_in_db(file_id):
         txt = '⛔️ <b>Фото уже в БД</b> ⛔️️'
-        await message.answer(text=txt, reply_markup=get_keyboard(message.from_user.id))
+        caption_global[message.from_user.id] = (file_id, message.caption)
+        await message.answer(text=txt, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='Всё равно добавить!', callback_data='ignore_warning')]]))
         return
-    last_num = get_last()
-    add_photo_id(last_num + 1, file_id, message.from_user.username)
-    add_girlphoto(message.from_user.id, last_num + 1)
+    last_num = await get_last()
+    await add_photo_id(last_num + 1, file_id, message.from_user.username)
+    await add_girlphoto(message.from_user.id, last_num + 1)
     if message.caption:
         await message.answer(text=f'Ты прислал фото с заметкой: <i>{message.caption}</i>. Оцени фото, которое ты скинул',
-                             reply_markup=get_rates_keyboard(last_num + 1, 0))
-        add_note(last_num + 1, message.caption)
+                             reply_markup=await get_rates_keyboard(last_num + 1, 0))
+        await add_note(last_num + 1, message.caption)
     else:
-        await message.answer(text='Оцени фото, которое ты скинул', reply_markup=get_rates_keyboard(last_num + 1, 0))
+        await message.answer(text='Оцени фото, которое ты скинул', reply_markup=await get_rates_keyboard(last_num + 1, 0))
+
+
+@dp.callback_query(F.data == 'ignore_warning')
+async def igmore_warning(callback: CallbackQuery):
+    file_id, caption = caption_global.get(callback.from_user.id, (0, 0))
+    caption_global[callback.from_user.id] = (0, 0)
+    if file_id == 0:
+        await callback.message.edit_text('Произошла ошибка')
+        return
+    last_num = await get_last()
+    await add_photo_id(last_num + 1, file_id, callback.message.from_user.username)
+    await add_girlphoto(callback.message.from_user.id, last_num + 1)
+    if caption and caption != 0:
+        await callback.message.edit_text(text=f'Ты прислал фото с заметкой: <i>{caption}</i>. Оцени фото, которое ты скинул',
+                                         reply_markup=await get_rates_keyboard(last_num + 1, 0))
+        await add_note(last_num + 1, caption)
+    else:
+        await callback.message.edit_text(text='Оцени фото, которое ты скинул', reply_markup=await get_rates_keyboard(last_num + 1, 0))
 
 
 @dp.message(F.text == 'Фото из очереди 🌆')
@@ -2357,42 +2249,31 @@ async def resend_photo(message: Message):
 
 @dp.message(F.text == 'Статистика 📊', ~StateFilter(FSMFillForm.rating))
 async def stat_photo(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
+    result = await check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
         if result[1] == -1:
             await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
                                  reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
             return
-        not_incel_rates = get_avgs_not_incel(message.from_user.id)
+        not_incel_rates = await get_avgs_not_incel(message.from_user.id)
         if len(not_incel_rates) > 5:
             async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
                 user_id = message.from_user.id
-                get_statistics_not_incel(user_id)
-                photo = InputMediaPhoto(media=FSInputFile(f'myplot_{user_id}2.png'), caption='График')
-                photo2 = InputMediaPhoto(media=FSInputFile(f'myplot_{user_id}.png'), caption='Гистограмма')
-                media = [photo, photo2]
-                await bot.send_media_group(media=media, chat_id=message.from_user.id)
-                os.remove(f'myplot_{user_id}.png')
-                os.remove(f'myplot_{user_id}2.png')
+                await get_statistics_not_incel(user_id)
+                await bot.send_photo(photo=FSInputFile(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}.png'), chat_id=message.from_user.id)
+                os.remove(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}.png')
         else:
-            await message.answer(text=f'📶 Пришли <b>не менее 6 фото</b>, чтобы получить статистику\nТебе осталось прислать {6 - len(not_incel_rates)}', reply_markup=get_keyboard(message.from_user.id))
+            await message.answer(text=f'📶 Пришли <b>не менее 6 фото</b>, чтобы получить статистику\nТебе осталось прислать {6 - len(not_incel_rates)}', reply_markup=await get_keyboard(message.from_user.id))
         return
-    if len_photos_by_username(message.from_user.username) > 0:
+    if await len_photos_by_username(message.from_user.username) > 0:
         async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
-            username = message.from_user.username
-            get_statistics(username)
-            photo = InputMediaPhoto(media=FSInputFile(f'myplot_{username}2.png'), caption='График')
-            photo2 = InputMediaPhoto(media=FSInputFile(f'myplot_{username}.png'), caption='Гистограмма')
-            media = [photo, photo2]
-            await bot.send_media_group(media=media, chat_id=message.from_user.id)
-            os.remove(f'myplot_{username}.png')
-            os.remove(f'myplot_{username}2.png')
-        votes = len(get_votes(max_photo_id_by_username(username)).keys())
-        users = len(get_users())
+            await get_statistics(message.from_user.username)
+        votes = len((await get_votes(await max_photo_id_by_username(message.from_user.username))).keys())
+        users = len(await get_users())
         if votes > users:
             users = votes
-        stats = get_avg_stats(message.from_user.id)
+        stats = await get_avg_stats(message.from_user.id)
         avg = ''
         if stats:
             avg_float = stats[1] / stats[2] if stats[2] != 0 else 0
@@ -2413,7 +2294,7 @@ async def stat_photo(message: Message, state: FSMContext):
                 emoji_local = '🤯'
             else:
                 emoji_local = '🙂'
-            if last_incel < get_large_last_incel():
+            if last_incel < await get_large_last_incel():
                 emoji_local2 = '👍'
             else:
                 emoji_local2 = '👎'
@@ -2425,50 +2306,51 @@ async def stat_photo(message: Message, state: FSMContext):
                 ending3 = 'раза'
             else:
                 ending3 = 'раз'
-            extra = f'Переобулся: <b>{overshoot} {ending}</b> {["🤡", "👠"][overshoot < get_large_overshoot()]}\nПроцент угаданной оценки: <b>{percentage}%</b> {emoji_local}\nОказался последним: <b>{last_incel} {ending3}</b> {emoji_local2}\nПроёбано: <b>{convert_unix_time(stats[8])}</b>'
-        await message.answer(text=f'Твое последнее фото оценили {votes}/{users} человек' + avg + '\n' + extra, reply_markup=get_keyboard(message.from_user.id))
+            extra = f'Переобулся: <b>{overshoot} {ending}</b> {["🤡", "👠"][overshoot < await get_large_overshoot()]}\nПроцент угаданной оценки: <b>{percentage}%</b> {emoji_local}\nОказался последним: <b>{last_incel} {ending3}</b> {emoji_local2}\nПроёбано: <b>{convert_unix_time(stats[8])}</b>'
+        await message.answer_photo(photo=FSInputFile(f'{os.path.dirname(__file__)}/pictures/myplot_{message.from_user.username}.png'), caption=f'Твое последнее фото оценили {votes}/{users} человек' + avg + '\n' + extra)
+        os.remove(f'{os.path.dirname(__file__)}/pictures/myplot_{message.from_user.username}.png')
     else:
-        await message.answer(text='Ты еще не присылал никаких фото', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text='Ты еще не присылал никаких фото', reply_markup=await get_keyboard(message.from_user.id))
 
 
 @dp.message(F.text == 'Изменить последнюю оценку ✏️', ~StateFilter(FSMFillForm.rating))
 async def change_last_rate(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
+    result = await check_id(message.from_user.id, message.from_user.username)
     if not result[0]:
         if result[1] == -1:
             await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
                                  reply_markup=ReplyKeyboardRemove())
             await state.set_state(FSMFillForm.banned)
-        await message.answer('Бля, иди нахуй реально!', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer('Бля, иди нахуй реально!', reply_markup=await get_keyboard(message.from_user.id))
         return
-    last_rate = get_last_rate(message.from_user.id)
+    last_rate = await get_last_rate(message.from_user.id)
     if last_rate == 0 or last_rate == 5:
         await message.answer(text='Ты не оценивал чужих фото!')
         return
     async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
-        await bot.send_photo(chat_id=message.from_user.id, photo=get_photo_id_by_id(last_rate),
-                             reply_markup=get_rates_keyboard(last_rate, 2), caption='Ну давай, переобуйся, тварь!')
+        await bot.send_photo(chat_id=message.from_user.id, photo=await get_photo_id_by_id(last_rate),
+                             reply_markup=await get_rates_keyboard(last_rate, 2), caption='Ну давай, переобуйся, тварь!')
 
 
-@dp.message(F.text == 'Настройки ⚙️', F.from_user.id.in_(get_users()))
+@dp.message(F.text == 'Настройки ⚙️', F.from_user.id.in_(sync_get_users()))
 async def settings_button_func(message: Message):
     user_id = message.from_user.id
-    if user_id not in get_admins():
+    if user_id not in await get_admins():
         await message.answer(text='Извини, ты больше не админ, лох!', reply_markup=basic_keyboard)
         return
-    await message.answer(text=get_text_of_settings(message.from_user.id), disable_web_page_preview=True,
-                         reply_markup=get_admin_keyboard(user_id))
+    await message.answer(text=await get_text_of_settings(message.from_user.id), disable_web_page_preview=True,
+                         reply_markup=await get_admin_keyboard(user_id))
 
 @dp.message(StateFilter(FSMFillForm.sendDM))
 async def send_dm_func(message: Message, state: FSMContext):
     if current_dm_id.get(message.from_user.id, 0) == 0:
-        await message.answer(text='Произошла ошибка!', reply_markup=get_keyboard(message.from_user.id))
+        await message.answer(text='Произошла ошибка!', reply_markup=await get_keyboard(message.from_user.id))
         await state.clear()
         return
     if current_dm_id.get(message.from_user.id, 0) == -1:
         current_dm_id[message.from_user.id] = 0
         await state.clear()
-        not_incel_ids: set = get_not_incel()
+        not_incel_ids: set = await get_not_incel()
         successfully_sent = 0
         for id_local in not_incel_ids:
             try:
@@ -2482,7 +2364,7 @@ async def send_dm_func(message: Message, state: FSMContext):
     if current_dm_id.get(message.from_user.id, 0) == -2:
         current_dm_id[message.from_user.id] = 0
         await state.clear()
-        incels: set = get_users()
+        incels: set = await get_users()
         successfully_sent = 0
         for id_local in incels:
             try:
@@ -2496,7 +2378,7 @@ async def send_dm_func(message: Message, state: FSMContext):
     if current_dm_id.get(message.from_user.id, 0) == -3:
         current_dm_id[message.from_user.id] = 0
         await state.clear()
-        incels: set = get_users()
+        incels: set = await get_users()
         successfully_sent = 0
         for id_local in incels:
             if id_local in (955289704):
@@ -2574,7 +2456,7 @@ async def dice_message(message: Message):
 
 @dp.message()
 async def any_message(message: Message, state: FSMContext):
-    result = check_id(message.from_user.id, message.from_user.username)
+    result = await check_id(message.from_user.id, message.from_user.username)
     if not result[0] and result[1] != -1:
         if message.text:
             pass
@@ -2642,10 +2524,10 @@ async def any_message(message: Message, state: FSMContext):
                     'Идут три инвалида по пустыне.\nСлепой, безрукий и колясочник.\nИдут идут и видят оазис. Ну безрукий туда ныряет. Вылазит и видит, что у него руки выросли. Говорит остальным что он волшебный и сразу за ним туда нырнул слепой. Вылазит и говорит:\n— Братцы, я теперь вижу\nА за ним со всех сил ковыляет до оазиса колясочник. Ныряет.\nВылезает и говорит:\n— У меня, блять, теперь новые покрышки.',
                     'На съезд инвалидов-колясочников никто не пришёл.']
                 await message.answer(text=random.choice(anecdotes),
-                                     reply_markup=get_keyboard(message.from_user.id))
+                                     reply_markup=await get_keyboard(message.from_user.id))
                 return
         await message.answer(text=random.choice(replicas.get('unknown', hz_answers)).replace('$', '"'),
-                             reply_markup=get_keyboard(message.from_user.id), disable_web_page_preview=True)
+                             reply_markup=await get_keyboard(message.from_user.id), disable_web_page_preview=True)
     else:
         await message.answer(text=random.choice(hz_answers), reply_markup=not_incel_keyboard)
 
@@ -2658,51 +2540,53 @@ async def any_callback(callback: CallbackQuery):
 async def weekly_tierlist(user=972753303):
     try:
         async with ChatActionSender(bot=bot, chat_id=972753303, action='upload_document'):
-            doc = InputMediaDocument(media=FSInputFile("slutsDB.db"))
-            doc2 = InputMediaDocument(media=FSInputFile("usersDB.db"))
-            doc3 = InputMediaDocument(media=FSInputFile("weekly.db"))
-            doc4 = InputMediaDocument(media=FSInputFile("weekly_info.db"))
-            doc5 = InputMediaDocument(media=FSInputFile("admins.db"))
-            doc6 = InputMediaDocument(media=FSInputFile("emoji.db"))
-            doc7 = InputMediaDocument(media=FSInputFile("statham.db"),
+            doc = InputMediaDocument(media=FSInputFile(f'{os.path.dirname(__file__)}/DB/slutsDB.db'))
+            doc2 = InputMediaDocument(media=FSInputFile(f'{os.path.dirname(__file__)}/DB/usersDB.db'))
+            doc3 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/weekly.db"))
+            doc4 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/weekly_info.db"))
+            doc5 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/admins.db"))
+            doc6 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/emoji.db"))
+            doc7 = InputMediaDocument(media=FSInputFile(f"{os.path.dirname(__file__)}/DB/statham.db"),
                                       caption=f'Бэкап <i>{datetime.datetime.now().date()}</i>')
             await bot.send_media_group(media=[doc, doc2, doc3, doc4, doc5, doc6, doc7], chat_id=972753303)
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! При отправке файлов для бэкапа\n{e}')
-    if not get_weekly(972753303):
+    if not await get_weekly(972753303):
         return
     async with ChatActionSender(bot=bot, chat_id=972753303):
-        d = get_weekly_db()
+        d = await get_weekly_db()
         new_d = {}
         cnt = 1
         for key, values in d.items():
             for value in values:
                 if value[:4]=='http':
                     try:
-                        response = requests.get(value)
-                        if response.status_code == 200:
-                            with open(f"test_{cnt}.jpg", "wb") as file:
-                                file.write(response.content)
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(value) as response:
+                                if response.status == 200:
+                                    async with aiofiles.open(f"{os.path.dirname(__file__)}/pictures/test_{cnt}.jpg", "wb") as file:
+                                        content = await response.read()
+                                        await file.write(content)
                     except Exception as e:
                         await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 13\n{e}')
                 else:
                     f = await bot.get_file(value)
                     f_path = f.file_path
-                    await bot.download_file(f_path, f"test_{cnt}.jpg")
-                new_d[key] = [f"test_{cnt}.jpg"] + new_d.get(key, [])
+                    await bot.download_file(f_path, f"{os.path.dirname(__file__)}/pictures/test_{cnt}.jpg")
+                new_d[key] = [f"{os.path.dirname(__file__)}/pictures/test_{cnt}.jpg"] + new_d.get(key, [])
                 cnt += 1
-        image_path = Path(f"test_{cnt}.jpg").resolve()
+        image_path = Path(f"{os.path.dirname(__file__)}/pictures/test_{cnt}.jpg").resolve()
         try:
             res = draw_tier_list(new_d)
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! При создании тир листа\n{e}')
         for i in range(1, cnt):
             try:
-                os.remove(f"test_{i}.jpg")
+                os.remove(f"{os.path.dirname(__file__)}/pictures/test_{i}.jpg")
             except Exception as e:
-                image_path = Path(f"test_{i}.jpg").resolve()
+                image_path = Path(f"{os.path.dirname(__file__)}/pictures/test_{i}.jpg").resolve()
                 await bot.send_message(chat_id=972753303, text=f'{e}\nПапка, где должны удалиться файлы: {image_path}')
-        if get_weekly(972753303):
+        if await get_weekly(972753303):
             try:
                 media = []
                 for path in res[1]:
@@ -2722,7 +2606,7 @@ async def weekly_tierlist(user=972753303):
                     cnt+=1
             await bot.send_message(chat_id=user, text=f'Залил тир лист в ебейшем качестве <b><a href="https://disk.yandex.ru/d/0fhOxQsjp4yqSQ">сюда</a></b>\n\nБыло использовано <b>{res[0]}</b> фоток', disable_web_page_preview=True)
         except Exception as e:
-            image_path = Path("tier_list.png").resolve()
+            image_path = Path(f"{os.path.dirname(__file__)}/pictures/tier_list.png").resolve()
             await bot.send_message(chat_id=972753303, text=f'{e}\nПапка, где должен быть тирлист: {image_path}')
         for path in res[1]:
             os.remove(path.replace('_compressed', ''))
@@ -2730,71 +2614,88 @@ async def weekly_tierlist(user=972753303):
 
 
 async def post_public():
-    for i in range(random.randint(1, 3)):
-        try:
-            num = get_min_from_public_info()
-            delete_from_queue_public_info(num)
-            votes = get_votes(num)
+    current_loop = asyncio.get_running_loop()
+    try:
+        media_amount = 9
+        media = []
+        media_paths = []
+        queue_length = await public_queue()
+        if queue_length < media_amount and False:
+            return
+        for _ in range(media_amount):
+            num = await get_min_from_public_info()
+            if num is None:
+                return
+            await delete_from_queue_public_info(num)
+            photo, votes = await async_get_photo_id_by_id(num)
             if len(votes.keys()) == 0:
                 continue
-            photo = get_photo_id_by_id(num)
-            hash = get_hash_from_db(photo)
+            hash = await get_hash_from_db(photo)
             rand_int = random.randint(1, 10 ** 8)
-            path = f"public_photo{rand_int}.jpg"
+            path = f"{os.path.dirname(__file__)}/pictures/public_photo{rand_int}.jpg"
+            media_paths.append(path)
             if photo[:4] == 'http':
                 try:
-                    response = requests.get(photo)
-                    if response.status_code == 200:
-                        with open(path, "wb") as file:
-                            file.write(response.content)
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(photo) as response:
+                            if response.status == 200:
+                                async with aiofiles.open(path, "wb") as file:
+                                    content = await response.read()
+                                    await file.write(content)
                 except Exception as e:
                     await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 4325\n{e}')
             else:
                 f = await bot.get_file(photo)
                 await bot.download_file(f.file_path, path)
-            colors = list(get_colors(path))
-            emoji_colors = colors[:5]
+
+            executor = concurrent.futures.ThreadPoolExecutor()
+
+            colors = await current_loop.run_in_executor(executor, get_colors, path)
+            emoji_colors = list(colors)[:5]
             for j in emoji_colors:
                 if j[1] > 40:
                     emoji_colors = [color_names[j[0]]]
                     break
             else:
                 emoji_colors = [color_names[j[0]] for j in emoji_colors if j[1] > 7]
-            c = search_emoji_by_colors(emoji_colors)
-            avg = sum(votes.values()) / len(votes.keys())
-            avg = min(avg + 2 + random.uniform(-0.2, 0.2), 10)
+            c = await search_emoji_by_colors(emoji_colors)
+            avg_orginal = sum(votes.values()) / len(votes.keys())
+            avg = stretch_grade(avg_orginal, *(await get_borders()))
             avg_str_public = '{:.2f}'.format(avg)
             rounded_public = round(avg)
             await send_results(num, avg_str_public)
-            watermark(path, avg_str_public, hash)
-            note_str_origin = get_note_sql(num)
+            await current_loop.run_in_executor(executor, watermark, path, avg_str_public, hash + str(avg_orginal))
+            note_str_origin = await async_get_note_sql(num)
             note_str = f'<blockquote>{note_str_origin}</blockquote>\n' if note_str_origin else ''
             txt2 = note_str + f'{c} <a href="https://t.me/RatePhotosBot">Оценено</a> на <b>{avg_str_public}</b> из <b>10</b>' + f'\n<i>{rate3[rounded_public]}</i>'
-            await bot.send_photo(chat_id=channel_id_public, photo=FSInputFile(path), caption=txt2)
+            media.append((InputMediaPhoto(media=FSInputFile(path), caption=txt2), avg))
+        await bot.send_message(chat_id=channel_id_public, text=get_caption_public(datetime.datetime.now().hour))
+        await bot.send_media_group(media=[photo for photo, _ in sorted(media, key=lambda x: x[1], reverse=True)], chat_id=channel_id_public)
+        for path in media_paths:
             os.remove(path)
-        except Exception as e:
-            await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 1100\n{e}')
+    except Exception as e:
+        await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 1100\n{e}')
 
 
 async def notify():
-    for user in get_users():
-        q = get_queue(user)
+    for user in await get_users():
+        q = await get_queue(user)
         if len(q) == 0:
             continue
-        if get_current_state(user) == 0:
+        if await get_current_state(user) == 0:
             await send_incel_photo(user_id=user)
         if states_users.get(user, None) is None or states_users[user] + datetime.timedelta(
                 hours=1) < datetime.datetime.now():
             await bot.send_message(chat_id=user, text='Напоминание:\n\n<b>оцени фото, тварь 🤬</b>',
-                                   reply_markup=get_keyboard(user))
+                                   reply_markup=await get_keyboard(user))
             states_users[user] = datetime.datetime.now()
 
 
 async def main():
     try:
         today = datetime.date.today()
-        for user in get_top_incels():
-            date = get_birthday(user)
+        for user in await get_top_incels():
+            date = await get_birthday(user)
             birthdate = datetime.datetime.fromtimestamp(date).date()
             birthday_this_year = birthdate.replace(year=today.year)
             if birthday_this_year < today:
@@ -2803,25 +2704,26 @@ async def main():
             days_until_birthday = (birthday_this_year - today).days
 
             if days_until_birthday == 7 or days_until_birthday == 1:
-                for user_local in get_top_incels() - {user}:
+                for user_local in ((await get_top_incels()) - {user}):
                     await bot.send_message(chat_id=user_local,
-                                           text=f'У инцела <b>@{get_username_by_id(user)}</b> скоро День Рождения ({birthdate.strftime("%d.%m.%Y")}), {["осталось", "остался"][days_until_birthday == 1]} {days_until_birthday} {["дней", "день"][days_until_birthday == 1]}!')
+                                           text=f'У инцела <b>@{await get_username_by_id(user)}</b> скоро День Рождения ({birthdate.strftime("%d.%m.%Y")}), {["осталось", "остался"][days_until_birthday == 1]} {days_until_birthday} {["дней", "день"][days_until_birthday == 1]}!')
             elif days_until_birthday == 0:
 
-                for user_local in get_top_incels() - {user}:
+                for user_local in ((await get_top_incels()) - {user}):
                     await bot.send_message(chat_id=user_local,
-                                           text=f'У инцела <b>@{get_username_by_id(user)}</b> сегодня День Рождения! <b>Поздравь инцела!</b>\nМужику исполнилось <b>{today.year - birthdate.year}</b>!')
+                                           text=f'У инцела <b>@{await get_username_by_id(user)}</b> сегодня День Рождения! <b>Поздравь инцела!</b>\nМужику исполнилось <b>{today.year - birthdate.year}</b>!')
     except Exception as e:
         await bot.send_message(chat_id=972753303, text=f'Ошибка! Код 322\n{e}')
     scheduler: AsyncIOScheduler = AsyncIOScheduler(timezone=str(tzlocal.get_localzone()))
     scheduler.add_job(notify, trigger='cron', hour='9-22/6', minute=0)
-    scheduler.add_job(post_public, 'cron', hour='*', minute=30)
+    scheduler.add_job(post_public, 'cron', hour='8-23/3', minute=30)
     scheduler.add_job(weekly_tierlist, trigger=CronTrigger(day_of_week='sun', hour=20, minute=40))
+    scheduler.add_job(update_borders, trigger=CronTrigger(day_of_week='tue', hour=5, minute=20))
 
     day_of_week_list = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-    for admin in get_admins():
-        sets = get_settings(admin)
-        days = get_weekdays(admin)
+    for admin in await get_admins():
+        sets = await get_settings(admin)
+        days = await get_weekdays(admin)
         for i in days:
             trigger = CronTrigger(day_of_week=day_of_week_list[i - 1], hour=int(sets[4]), minute=int(sets[5]))
             scheduler.add_job(notify_admin, trigger=trigger, args=(admin,))

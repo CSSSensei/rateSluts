@@ -1,12 +1,14 @@
 import random
-
+import asyncio
 import cv2
 import numpy as np
 from scipy.spatial import KDTree
 import sqlite3
 import json
+import aiosqlite
+from db_paths import db_paths
 
-conn = sqlite3.connect('emoji.db')
+conn = sqlite3.connect(db_paths['emoji'])
 cursor = conn.cursor()
 cursor.execute('''CREATE TABLE IF NOT EXISTS emoji 
                   (id INTEGER PRIMARY KEY, emoji TEXT, colors TEXT)''')
@@ -50,32 +52,38 @@ palette = list(color_names.keys())
 palette_tree = KDTree(palette)
 
 
-def search_emoji_by_colors(colors):
-    resultM = []
-    for i in colors:
-        if i in interesting:
-            query = f"SELECT emoji FROM emotions WHERE {i}=1"
-            cursor.execute(query)
-            result = cursor.fetchall()
+async def search_emoji_by_colors(colors):
+    conn = await get_async_connection()
+    async with conn.cursor() as cursor:
+        resultM = []
+        for i in colors:
+            if i in interesting:
+                query = f"SELECT emoji FROM emotions WHERE {i}=1"
+                await cursor.execute(query)
+                result = await cursor.fetchall()
+                if result:
+                    resultM += result
+                    return random.choice(resultM)[0]
+        for i in range(len(colors), 0, -1):
+            query = "SELECT emoji FROM emotions WHERE "
+            for j, color in enumerate(colors[:i]):
+                query += f"{color} = 1 AND "
+            query = query[:-5]  # Убираем последний "AND"
+            await cursor.execute(query)
+            result = await cursor.fetchall()
             if result:
                 resultM += result
-                return random.choice(resultM)[0]
-    for i in range(len(colors), 0, -1):
-        query = "SELECT emoji FROM emotions WHERE "
-        for j, color in enumerate(colors[:i]):
-            query += f"{color} = 1 AND "
-        query = query[:-5]  # Убираем последний "AND"
-        cursor.execute(query)
-        result = cursor.fetchall()
-        if result:
-            resultM += result
-    if len(resultM) != 0:
-        return random.choice(resultM)[0]
-    else:
-        sql_query = 'SELECT emoji FROM emotions ORDER BY RANDOM() LIMIT 1;'
-        cursor.execute(sql_query)
-        random_emoji = cursor.fetchone()
-        return random_emoji[0]
+        if len(resultM) != 0:
+            return random.choice(resultM)[0]
+        else:
+            sql_query = 'SELECT emoji FROM emotions ORDER BY RANDOM() LIMIT 1;'
+            await cursor.execute(sql_query)
+            random_emoji = await cursor.fetchone()
+            return random_emoji[0]
+
+async def get_async_connection():
+    async_connection = await aiosqlite.connect(db_paths['emoji'])
+    return async_connection
 
 
 def add_color_emoji(id, color):
@@ -139,14 +147,13 @@ def map_color_to_palette(rgb_color):
 
 def get_colors(path):
     image = cv2.imread(path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     scale_percent = 50
     width = int(image.shape[1] * scale_percent / 100)
     height = int(image.shape[0] * scale_percent / 100)
     dim = (width, height)
     image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     d: dict = {}
-
     pixels = np.reshape(image, (-1, 3))
     color_counts = list(map(tuple, pixels))
     for pixel in color_counts:
@@ -169,7 +176,7 @@ if __name__ == '__main__':
         if 'Grey' in emoji_colors[:3] and 'Black' in emoji_colors[:3]:
             emoji_colors = ['Grey']
     print(emoji_colors)
-    c = search_emoji_by_colors(emoji_colors)
+    c = asyncio.run(search_emoji_by_colors(emoji_colors))
     print(c)
 
     # for i in range(1, 283):
