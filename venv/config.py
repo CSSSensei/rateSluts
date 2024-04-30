@@ -140,3 +140,11 @@ rate3 = {
     1: '#Фу',
     0: '#Кандидат_от_оппозиции'
 }
+
+
+def encrypt(num: float):
+    num = round((num), 2)
+    whole_part = int(num)
+    decimal_part = round((num - whole_part), 2)
+    decimal_part = '{:.2f}'.format(decimal_part)
+    return f"r{whole_part}p{decimal_part[2:]}"

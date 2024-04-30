@@ -28,6 +28,7 @@
 #       |_| |_| |_| \___|| .__/ |_| |_||_|   |_| \___||_||___/
 #                        | |
 #                        |_|
+import asyncio
 
 from config import *
 
@@ -504,7 +505,7 @@ async def send_group_photo(user_id: int, num: str):
         await bot.send_message(chat_id=user_id, text=f'Произошла ошибка! Код 1\n{e}')
 
 
-async def already_in_db(path):
+async def already_in_db(path, try_cnt=0):
     try:
         current_loop = asyncio.get_running_loop()
         executor = concurrent.futures.ThreadPoolExecutor()
@@ -525,11 +526,14 @@ async def already_in_db(path):
         hash = await current_loop.run_in_executor(executor, get_hash, saved_path)
         os.remove(saved_path)
         if await get_similarities(hash):
-            return True
-        return False
+            return True, hash
+        return False, hash
     except Exception as e:
-        await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 9945\n{e}')
-        return False
+        await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 9945. Поставил ожидание на 5 секунд\n{e}')
+        if try_cnt > 2:
+            return False, None
+        await asyncio.sleep(5)
+        return await already_in_db(path, try_cnt=try_cnt + 1)
 
 
 async def notify_admin(user_id: int, message_id=0):
@@ -568,10 +572,12 @@ async def notify_admin(user_id: int, message_id=0):
                     if len(post[0]) == 1:
                         num = await last_group_photo_id() + 1
                         if sets[7] == 1:
-                            if await already_in_db(post[0][0]):
+                            in_db, hash = await already_in_db(post[0][0])
+                            if in_db:
                                 skipped += 1
                                 continue
-                            await download_hash(link=post[0][0])
+                            if hash:
+                                await download_hash(link=post[0][0], hash=hash)
                             await add_group_photo(num, f"{group_sets[1]}?w=wall{link}",
                                                   format_text(post[1], group_sets[1], link), post[0][0])
                             if cnt - 1 == skipped:
@@ -591,9 +597,11 @@ async def notify_admin(user_id: int, message_id=0):
                         num = await last_group_photo_id()
                         for url in post[0]:
                             if sets[7] == 1:
-                                if await already_in_db(url):
+                                in_db, hash = await already_in_db(url)
+                                if in_db:
                                     continue
-                                await download_hash(link=url)
+                                if hash:
+                                    await download_hash(link=url, hash=hash)
                             num += 1
                             if sets[7] == 1:
                                 await add_group_photo(num, f"{group_sets[1]}?w=wall{link}",
@@ -1357,7 +1365,13 @@ async def send_incel_photo(callback: Union[CallbackQuery, None] = None, user_id:
                 await delete_from_queue(user_id, num)
 
 
-async def download_hash(num=1, link=None):
+async def download_hash(num=1, link=None, hash=None):
+    try:
+        if hash and link:
+            await add_to_weekly(link, None, hash)
+            return
+    except Exception:
+        return
     path = f"{os.path.dirname(__file__)}/pictures/image_{random.randint(1, 10 ** 8)}.jpg"
     if link:
         value = link
@@ -1692,12 +1706,6 @@ def format_caption(text):
 
 
 async def send_quote(user_id):
-    url = "http://api.forismatic.com/api/1.0/"
-    params = {
-        "method": "getQuote",
-        "format": "json",
-        "lang": "ru"
-    }
     try:
         rand_int = random.random()
         keyboard = [[InlineKeyboardButton(text='Еще цитата 📖', callback_data='more')]]
@@ -1721,12 +1729,25 @@ async def send_quote(user_id):
                 await bot.send_message(chat_id=user_id, text=caption, reply_markup=markup_local)
             return
         else:
-            response = requests.get(url, params=params)
-            quote = response.json().get("quoteText")
+            quote = await get_quote()
 
         await bot.send_message(chat_id=user_id, text=f'<blockquote>{quote}</blockquote>', reply_markup=markup_local)
     except requests.RequestException as e:
         await bot.send_message(chat_id=user_id, text=f'<i>{legendary_quote}</i>')
+
+
+async def get_quote():
+    url = "http://api.forismatic.com/api/1.0/"
+    params = {
+        "method": "getQuote",
+        "format": "json",
+        "lang": "ru"
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as response:
+            data = await response.json()
+            quote = data.get("quoteText")
+            return quote
 
 
 @dp.message(Command(commands='quote'))
@@ -2208,7 +2229,7 @@ async def default_photo(message: Message, state: FSMContext):
         except Exception as e:
             await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 12\n{str(e)}')
         return
-    if await already_in_db(file_id):
+    if (await already_in_db(file_id))[0]:
         txt = '⛔️ <b>Фото уже в БД</b> ⛔️️'
         caption_global[message.from_user.id] = (file_id, message.caption)
         await message.answer(text=txt, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='Всё равно добавить!', callback_data='ignore_warning')]]))
@@ -2249,68 +2270,83 @@ async def resend_photo(message: Message):
 
 @dp.message(F.text == 'Статистика 📊', ~StateFilter(FSMFillForm.rating))
 async def stat_photo(message: Message, state: FSMContext):
-    result = await check_id(message.from_user.id, message.from_user.username)
-    if not result[0]:
-        if result[1] == -1:
-            await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
-                                 reply_markup=ReplyKeyboardRemove())
-            await state.set_state(FSMFillForm.banned)
+    try:
+        result = await check_id(message.from_user.id, message.from_user.username)
+        rand_int = random.randint(1, 10 ** 9)
+        if not result[0]:
+            if result[1] == -1:
+                await message.answer(random.choice(emoji_banned) + ' ' + random.choice(replicas['banned']).replace('$', '"'),
+                                     reply_markup=ReplyKeyboardRemove())
+                await state.set_state(FSMFillForm.banned)
+                return
+            not_incel_rates = await get_avgs_not_incel(message.from_user.id)
+            if len(not_incel_rates) > 5:
+                async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
+                    user_id = message.from_user.id
+                    if (await get_statistics_not_incel(user_id, rand_int)) == -1:
+                        await message.answer('Хмм... Что-то пошло не так(', reply_markup=await get_keyboard(message.from_user.id))
+                        await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 6430\n{e}')
+                        return
+                    await bot.send_photo(photo=FSInputFile(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}{rand_int}.png'),
+                                         chat_id=message.from_user.id)
+                    os.remove(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}{rand_int}.png')
+            else:
+                await message.answer(
+                    text=f'📶 Пришли <b>не менее 6 фото</b>, чтобы получить статистику\nТебе осталось прислать {6 - len(not_incel_rates)}',
+                    reply_markup=await get_keyboard(message.from_user.id))
             return
-        not_incel_rates = await get_avgs_not_incel(message.from_user.id)
-        if len(not_incel_rates) > 5:
+        if await len_photos_by_username(message.from_user.username) > 0:
             async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
-                user_id = message.from_user.id
-                await get_statistics_not_incel(user_id)
-                await bot.send_photo(photo=FSInputFile(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}.png'), chat_id=message.from_user.id)
-                os.remove(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}.png')
+                if (await get_statistics(message.from_user.username, rand_int)) == -1:
+                    await message.answer('Хмм... Что-то пошло не так(', reply_markup=await get_keyboard(message.from_user.id))
+                    await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 6431\n{e}')
+                    return
+            votes = len((await get_votes(await max_photo_id_by_username(message.from_user.username))).keys())
+            users = len(await get_users())
+            if votes > users:
+                users = votes
+            stats = await get_avg_stats(message.from_user.id)
+            avg = ''
+            if stats:
+                avg_float = stats[1] / stats[2] if stats[2] != 0 else 0
+                avg = f'\nCредняя оценка: <b>{"{:.2f}".format(avg_float)}</b> ' + emoji[round(avg_float)]
+                overshoot = stats[3]
+                hit = stats[4]
+                last_incel = stats[6]
+                if overshoot in (11, 12, 13, 14):
+                    ending = 'раз'
+                elif overshoot % 10 == 1:
+                    ending = 'раз'
+                elif overshoot % 10 in (2, 3, 4):
+                    ending = 'раза'
+                else:
+                    ending = 'раз'
+                percentage = '0.00' if stats[5] == 0 else "{:.2f}".format(hit / stats[5] * 100)
+                if float(percentage) > 30:
+                    emoji_local = '🤯'
+                else:
+                    emoji_local = '🙂'
+                if last_incel < await get_large_last_incel():
+                    emoji_local2 = '👍'
+                else:
+                    emoji_local2 = '👎'
+                if last_incel in (11, 12, 13, 14):
+                    ending3 = 'раз'
+                elif last_incel % 10 == 1:
+                    ending3 = 'раз'
+                elif last_incel % 10 in (2, 3, 4):
+                    ending3 = 'раза'
+                else:
+                    ending3 = 'раз'
+                extra = f'Переобулся: <b>{overshoot} {ending}</b> {["🤡", "👠"][overshoot < await get_large_overshoot()]}\nПроцент угаданной оценки: <b>{percentage}%</b> {emoji_local}\nОказался последним: <b>{last_incel} {ending3}</b> {emoji_local2}\nПроёбано: <b>{convert_unix_time(stats[8])}</b>'
+            await message.answer_photo(
+                photo=FSInputFile(f'{os.path.dirname(__file__)}/pictures/myplot_{message.from_user.username}{rand_int}.png'),
+                caption=f'Твое последнее фото оценили {votes}/{users} человек' + avg + '\n' + extra)
+            os.remove(f'{os.path.dirname(__file__)}/pictures/myplot_{message.from_user.username}{rand_int}.png')
         else:
-            await message.answer(text=f'📶 Пришли <b>не менее 6 фото</b>, чтобы получить статистику\nТебе осталось прислать {6 - len(not_incel_rates)}', reply_markup=await get_keyboard(message.from_user.id))
-        return
-    if await len_photos_by_username(message.from_user.username) > 0:
-        async with ChatActionSender(bot=bot, chat_id=message.from_user.id, action='upload_photo'):
-            await get_statistics(message.from_user.username)
-        votes = len((await get_votes(await max_photo_id_by_username(message.from_user.username))).keys())
-        users = len(await get_users())
-        if votes > users:
-            users = votes
-        stats = await get_avg_stats(message.from_user.id)
-        avg = ''
-        if stats:
-            avg_float = stats[1] / stats[2] if stats[2] != 0 else 0
-            avg = f'\nCредняя оценка: <b>{"{:.2f}".format(avg_float)}</b> ' + emoji[round(avg_float)]
-            overshoot = stats[3]
-            hit = stats[4]
-            last_incel = stats[6]
-            if overshoot in (11, 12, 13, 14):
-                ending = 'раз'
-            elif overshoot % 10 == 1:
-                ending = 'раз'
-            elif overshoot % 10 in (2, 3, 4):
-                ending = 'раза'
-            else:
-                ending = 'раз'
-            percentage = '0.00' if stats[5] == 0 else "{:.2f}".format(hit / stats[5] * 100)
-            if float(percentage) > 30:
-                emoji_local = '🤯'
-            else:
-                emoji_local = '🙂'
-            if last_incel < await get_large_last_incel():
-                emoji_local2 = '👍'
-            else:
-                emoji_local2 = '👎'
-            if last_incel in (11, 12, 13, 14):
-                ending3 = 'раз'
-            elif last_incel % 10 == 1:
-                ending3 = 'раз'
-            elif last_incel % 10 in (2, 3, 4):
-                ending3 = 'раза'
-            else:
-                ending3 = 'раз'
-            extra = f'Переобулся: <b>{overshoot} {ending}</b> {["🤡", "👠"][overshoot < await get_large_overshoot()]}\nПроцент угаданной оценки: <b>{percentage}%</b> {emoji_local}\nОказался последним: <b>{last_incel} {ending3}</b> {emoji_local2}\nПроёбано: <b>{convert_unix_time(stats[8])}</b>'
-        await message.answer_photo(photo=FSInputFile(f'{os.path.dirname(__file__)}/pictures/myplot_{message.from_user.username}.png'), caption=f'Твое последнее фото оценили {votes}/{users} человек' + avg + '\n' + extra)
-        os.remove(f'{os.path.dirname(__file__)}/pictures/myplot_{message.from_user.username}.png')
-    else:
-        await message.answer(text='Ты еще не присылал никаких фото', reply_markup=await get_keyboard(message.from_user.id))
+            await message.answer(text='Ты еще не присылал никаких фото', reply_markup=await get_keyboard(message.from_user.id))
+    except Exception as e:
+        await bot.send_message(chat_id=972753303, text=f'Произошла ошибка! Код 6432\n{e}')
 
 
 @dp.message(F.text == 'Изменить последнюю оценку ✏️', ~StateFilter(FSMFillForm.rating))
@@ -2620,7 +2656,7 @@ async def post_public():
         media = []
         media_paths = []
         queue_length = await public_queue()
-        if queue_length < media_amount and False:
+        if queue_length < media_amount:
             return
         for _ in range(media_amount):
             num = await get_min_from_public_info()
@@ -2664,12 +2700,12 @@ async def post_public():
             avg_str_public = '{:.2f}'.format(avg)
             rounded_public = round(avg)
             await send_results(num, avg_str_public)
-            await current_loop.run_in_executor(executor, watermark, path, avg_str_public, hash + str(avg_orginal))
+            await current_loop.run_in_executor(executor, watermark, path, avg_str_public, str(hash) + encrypt(avg_orginal))
             note_str_origin = await async_get_note_sql(num)
             note_str = f'<blockquote>{note_str_origin}</blockquote>\n' if note_str_origin else ''
             txt2 = note_str + f'{c} <a href="https://t.me/RatePhotosBot">Оценено</a> на <b>{avg_str_public}</b> из <b>10</b>' + f'\n<i>{rate3[rounded_public]}</i>'
             media.append((InputMediaPhoto(media=FSInputFile(path), caption=txt2), avg))
-        await bot.send_message(chat_id=channel_id_public, text=get_caption_public(datetime.datetime.now().hour))
+        await bot.send_message(chat_id=channel_id_public, text=await get_quote())
         await bot.send_media_group(media=[photo for photo, _ in sorted(media, key=lambda x: x[1], reverse=True)], chat_id=channel_id_public)
         for path in media_paths:
             os.remove(path)
@@ -2716,7 +2752,7 @@ async def main():
         await bot.send_message(chat_id=972753303, text=f'Ошибка! Код 322\n{e}')
     scheduler: AsyncIOScheduler = AsyncIOScheduler(timezone=str(tzlocal.get_localzone()))
     scheduler.add_job(notify, trigger='cron', hour='9-22/6', minute=0)
-    scheduler.add_job(post_public, 'cron', hour='8-23/3', minute=30)
+    scheduler.add_job(post_public, 'cron', hour='8-20/4,0', minute=30)
     scheduler.add_job(weekly_tierlist, trigger=CronTrigger(day_of_week='sun', hour=20, minute=40))
     scheduler.add_job(update_borders, trigger=CronTrigger(day_of_week='tue', hour=5, minute=20))
 

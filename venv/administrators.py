@@ -381,7 +381,7 @@ async def delete_group(group_id: int, user_id: int):
         await cursor.execute('DELETE FROM group_parser WHERE id=?', (group_id,))
         await async_connection.commit()
         await cursor.execute("SELECT groups_to_moderate FROM admins_info WHERE id=?", (user_id,))
-        groups = set(map(int, cursor.fetchone()[0].split(',')))
+        groups = set(map(int, (await cursor.fetchone())[0].split(',')))
         groups.remove(group_id)
         if len(groups) == 0:
             groups = None

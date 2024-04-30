@@ -16,12 +16,14 @@ async def get_async_connection():
     return async_connection
 
 
-async def get_statistics(username):
+async def get_statistics(username, rand_int):
+    rows = -1
     async_connection = await get_async_connection()
     async with async_connection.cursor() as cursor:
         await cursor.execute(f"SELECT * FROM sluts_info WHERE origin = '{username}'")
         rows = await cursor.fetchall()
-
+    if rows == -1:
+        return -1
     # Создаем списки для хранения данных
     votes = []
     averages = []
@@ -44,7 +46,7 @@ async def get_statistics(username):
     plt.yticks([i - 0.5 for i in range(12)], minor=True)
     plt.xlabel('Номер фотки')
     plt.ylabel('Оценка')
-    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{username}.png')
+    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{username}{rand_int}.png')
     plt.clf()
     #
     # plt.plot(averages)
@@ -59,13 +61,15 @@ async def get_statistics(username):
 
 
 
-async def get_statistics_not_incel(user_id):
+async def get_statistics_not_incel(user_id, rand_int):
     username = await get_username_by_id(user_id)
     async_connection = await get_async_connection()
+    rows = -1
     async with async_connection.cursor() as cursor:
         await cursor.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
         rows = await cursor.fetchall()
-
+    if rows == -1:
+        return -1
     # Создаем списки для хранения данных
     votes = []
     averages = []
@@ -88,18 +92,7 @@ async def get_statistics_not_incel(user_id):
     plt.yticks([i - 0.5 for i in range(12)], minor=True)
     plt.xlabel('№ фотки')
     plt.ylabel('Оценка')
-    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}.png')
-    # Закрываем соединение с базой данных
-    plt.clf()
-
-    plt.plot(averages)
-    plt.title(username)
-    plt.yticks([i for i in range(12)])
-    plt.yticks([i - 0.5 for i in range(12)], minor=True)
-    plt.xlabel('№ фотки')
-    plt.ylabel('Оценка')
-    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}2.png')
-    plt.clf()
+    plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{user_id}{rand_int}.png')
 
 
 def new_func(username, averages):
