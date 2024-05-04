@@ -289,7 +289,7 @@ async def send_quote_dada(message: Message, state: FSMContext):
     await message.answer(text='Пришли цитату в формате фото или текста')
     await state.set_state(FSMFillForm.sendQuote)
 
-cnt = 1
+cnt = 0
 
 @dp.message(Command(commands='test'), F.from_user.id.in_(incels))
 async def test_something(message: Message):
@@ -1832,7 +1832,6 @@ async def upd_groupnames(message: Message):
         await message.answer('Названия групп обновлены!')
 
 
-
 @dp.message(Command(commands='clear_states'), F.from_user.id.in_(incels))
 async def clear_state(message: Message):
     if message.from_user.id != 972753303:
@@ -2023,7 +2022,7 @@ async def send_statham_db(message: Message):
 
 @dp.message(Command(commands='getcoms'), F.from_user.id.in_(incels))
 async def get_all_commands(message: Message):
-    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topsync_get_users()\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/public_queue\n/getcoms\n/amogus\n/pepe\n/about'
+    txt = '/start\n/help\n/stat\n/anon\n/info\n/quote\n/del_...\n/ban_...\n/send_..\n/send_all\n/send_incels\n/send_topincels\n/cs_...\n/cavg_...\n/new_quote\n/remove_quote ...\n/queue\n/wasted_time\n/backup\n/get_statham_db\n/send_tier_list\n/upd_groupnames\n/avgs\n/upd_file\n/delete_tier_list\n/get_users\n/get_users_info_db\n/get_weekly_db\n/get_latest_sluts\n/get_sluts_db\n/weekly_off\n/weekly_on\n/clear_queue\n/clear_states\n/clear_admin_queues\n/get_ban\n/password_yaincel\n/public_queue\n/getcoms\n/amogus\n/pepe\n/about'
     await message.answer(text=txt, reply_markup=await get_keyboard(message.from_user.id))
 
 

@@ -9,18 +9,13 @@ import aiohttp
 import aiosqlite
 from db_paths import db_paths
 
-db = db_paths['sluts']
-
-async def get_async_connection():
-    async_connection = await aiosqlite.connect(db)
-    return async_connection
+slutsDB = db_paths['sluts']
 
 
 async def get_statistics(username, rand_int):
     rows = -1
-    async_connection = await get_async_connection()
-    async with async_connection.cursor() as cursor:
-        await cursor.execute(f"SELECT * FROM sluts_info WHERE origin = '{username}'")
+    async with aiosqlite.connect(slutsDB) as db:
+        cursor = await db.execute(f"SELECT * FROM sluts_info WHERE origin = '{username}'")
         rows = await cursor.fetchall()
     if rows == -1:
         return -1
@@ -60,13 +55,11 @@ async def get_statistics(username, rand_int):
     # plt.clf()
 
 
-
 async def get_statistics_not_incel(user_id, rand_int):
     username = await get_username_by_id(user_id)
-    async_connection = await get_async_connection()
     rows = -1
-    async with async_connection.cursor() as cursor:
-        await cursor.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
+    async with aiosqlite.connect(slutsDB) as db:
+        cursor = await cursor.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
         rows = await cursor.fetchall()
     if rows == -1:
         return -1
@@ -110,7 +103,7 @@ def new_func(username, averages):
     #
 
     labels = ['Positive', 'Neutral', 'Negative']
-    sizes = [len([i for i in averages if i>6]), len([i for i in averages if 4<=i<=6]), len([i for i in averages if i<4])]
+    sizes = [len([i for i in averages if i > 6]), len([i for i in averages if 4 <= i <= 6]), len([i for i in averages if i < 4])]
     colors = ['#ff9999', '#66b3ff', '#99ff99']
     explode = (0.1, 0, 0)  # "взрыв" первого сектора
 
@@ -119,7 +112,6 @@ def new_func(username, averages):
 
     plt.savefig(f'{os.path.dirname(__file__)}/pictures/myplot_{username}_pie.png')
     plt.clf()
-
 
     fig, ax = plt.subplots()
     ax.set_xlim(0, len(averages) + 5)
@@ -145,6 +137,3 @@ def new_func(username, averages):
 
     # Сохраняем анимацию в файл
     anim.save(f'{os.path.dirname(__file__)}/pictures/myplot_{username}_animation.gif', writer='imagemagick')
-
-
-
