@@ -137,7 +137,6 @@ async def delete_from_queue_public_info(num):
                 queue_str = ', '.join(map(str, queue))
                 await db.execute("UPDATE public_info SET queue = ? ", (queue_str,))
                 await db.commit()
-    await async_connection.close()
 
 
 async def public_queue():

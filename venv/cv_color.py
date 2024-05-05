@@ -15,6 +15,8 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS emoji
 
 cursor.execute('''CREATE TABLE IF NOT EXISTS emotions 
                   (id INTEGER PRIMARY KEY, emoji TEXT, Red BOOL, Green BOOL, Blue BOOL, Yellow BOOL, Purple BOOL, Turquoise BOOL, DarkGreen BOOL, DarkDarkGreen BOOL, DarkDarkRed BOOL, DarkBlue BOOL, Cyan BOOL, DarkYellow BOOL, DarkTurquoise BOOL, White BOOL, Pink BOOL, Vinous BOOL, Magenta BOOL, Lime BOOL, Gold BOOL, LightPink BOOL, DenseWood BOOL, Chocolate BOOL, Orange BOOL, Black BOOL, Beige BOOL, Grey BOOL)''')
+cursor.close()
+conn.close()
 
 color_names: dict = {
     (240, 0, 0): 'Red',
@@ -53,13 +55,12 @@ palette_tree = KDTree(palette)
 
 
 async def search_emoji_by_colors(colors):
-    conn = await get_async_connection()
-    async with conn.cursor() as cursor:
+    async with aiosqlite.connect(db_paths['emoji']) as db:
         resultM = []
         for i in colors:
             if i in interesting:
                 query = f"SELECT emoji FROM emotions WHERE {i}=1"
-                await cursor.execute(query)
+                cursor = await db.execute(query)
                 result = await cursor.fetchall()
                 if result:
                     resultM += result
@@ -69,7 +70,7 @@ async def search_emoji_by_colors(colors):
             for j, color in enumerate(colors[:i]):
                 query += f"{color} = 1 AND "
             query = query[:-5]  # Убираем последний "AND"
-            await cursor.execute(query)
+            cursor = await db.execute(query)
             result = await cursor.fetchall()
             if result:
                 resultM += result
@@ -77,66 +78,72 @@ async def search_emoji_by_colors(colors):
             return random.choice(resultM)[0]
         else:
             sql_query = 'SELECT emoji FROM emotions ORDER BY RANDOM() LIMIT 1;'
-            await cursor.execute(sql_query)
+            cursor = await db.execute(sql_query)
             random_emoji = await cursor.fetchone()
             return random_emoji[0]
 
-async def get_async_connection():
-    async_connection = await aiosqlite.connect(db_paths['emoji'])
-    return async_connection
-
 
 def add_color_emoji(id, color):
-    cursor.execute("SELECT colors FROM emoji WHERE id=?", (id,))
-    colors = cursor.fetchone()[0]
-    if colors is None or colors == '':
-        colors = str(color)
-    else:
-        colors = set(map(int, colors.split(',')))
-        colors.add(color)
-        colors = ', '.join(map(str, colors))
-    cursor.execute("UPDATE emoji SET colors=? WHERE id=?", (colors, id,))
-    conn.commit()
-
-
-def delete_color_emoji(id, color: int):
-    cursor.execute("SELECT colors FROM emoji WHERE id=?", (id,))
-    colors = cursor.fetchone()[0]
-    if not (colors is None or colors == ''):
-        colors = set(map(int, colors.split(',')))
-        colors.remove(color)
-        colors = ', '.join(map(str, colors))
+    with sqlite3.connect(db_paths['emoji']) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT colors FROM emoji WHERE id=?", (id,))
+        colors = cursor.fetchone()[0]
+        if colors is None or colors == '':
+            colors = str(color)
+        else:
+            colors = set(map(int, colors.split(',')))
+            colors.add(color)
+            colors = ', '.join(map(str, colors))
         cursor.execute("UPDATE emoji SET colors=? WHERE id=?", (colors, id,))
         conn.commit()
 
 
+def delete_color_emoji(id, color: int):
+    with sqlite3.connect(db_paths['emoji']) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT colors FROM emoji WHERE id=?", (id,))
+        colors = cursor.fetchone()[0]
+        if not (colors is None or colors == ''):
+            colors = set(map(int, colors.split(',')))
+            colors.remove(color)
+            colors = ', '.join(map(str, colors))
+            cursor.execute("UPDATE emoji SET colors=? WHERE id=?", (colors, id,))
+            conn.commit()
+
+
 def add_new_emoji(emoji: str):
-    cursor.execute("SELECT MAX(id) FROM emoji")
-    max_id = cursor.fetchone()[0]
-    if max_id is None:
-        max_id = 0
-    cursor.execute("INSERT INTO emoji (id, emoji) VALUES (?, ?)", (max_id + 1, emoji))
-    conn.commit()
-    return max_id + 1
+    with sqlite3.connect(db_paths['emoji']) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(id) FROM emoji")
+        max_id = cursor.fetchone()[0]
+        if max_id is None:
+            max_id = 0
+        cursor.execute("INSERT INTO emoji (id, emoji) VALUES (?, ?)", (max_id + 1, emoji))
+        conn.commit()
+        return max_id + 1
 
 
 def get_colors_emoji(emoji: str):
-    emoji_id = get_id_emoji(emoji)
-    cursor.execute("SELECT colors FROM emoji WHERE id=?", (emoji_id,))
-    colors = cursor.fetchone()[0]
-    if colors is None or colors == '':
-        return set()
-    colors = set(map(int, colors.split(',')))
-    return colors
+    with sqlite3.connect(db_paths['emoji']) as conn:
+        cursor = conn.cursor()
+        emoji_id = get_id_emoji(emoji)
+        cursor.execute("SELECT colors FROM emoji WHERE id=?", (emoji_id,))
+        colors = cursor.fetchone()[0]
+        if colors is None or colors == '':
+            return set()
+        colors = set(map(int, colors.split(',')))
+        return colors
 
 
 def get_id_emoji(emoji: str):
-    cursor.execute("SELECT id FROM emoji WHERE emoji=?", (emoji,))
-    id = cursor.fetchone()
-    if id is None or id[0] is None:
-        id = add_new_emoji(emoji)
-        return id
-    return id[0]
+    with sqlite3.connect(db_paths['emoji']) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM emoji WHERE emoji=?", (emoji,))
+        id = cursor.fetchone()
+        if id is None or id[0] is None:
+            id = add_new_emoji(emoji)
+            return id
+        return id[0]
 
 
 def map_color_to_palette(rgb_color):
