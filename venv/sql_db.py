@@ -31,6 +31,8 @@ async def check_id(id: int, username: str) -> bool:
             return [False, 10]
 
         verified = True if user_is_verified[0] else False
+        await db.execute("UPDATE users_info SET username=? WHERE id=?", (username, id))
+        await db.commit()
         if verified:
             return [True]
         cursor = await db.execute("SELECT banned FROM users_info WHERE id=?", (id,))

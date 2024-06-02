@@ -59,7 +59,7 @@ async def get_statistics_not_incel(user_id, rand_int):
     username = await get_username_by_id(user_id)
     rows = -1
     async with aiosqlite.connect(slutsDB) as db:
-        cursor = await cursor.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
+        cursor = await db.execute(f"SELECT * FROM results WHERE user_id = {user_id}")
         rows = await cursor.fetchall()
     if rows == -1:
         return -1
