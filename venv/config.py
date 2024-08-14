@@ -61,6 +61,8 @@ storage: MemoryStorage = MemoryStorage()
 
 bot: Bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp: Dispatcher = Dispatcher(storage=storage)
+ADMINS = {972753303, 735273809}
+ROOT_ADMIN = {972753303}
 current_dm_id = {}
 states_users = {}
 caption_global = {}

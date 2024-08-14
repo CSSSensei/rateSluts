@@ -186,11 +186,8 @@ async def get_keyboard(user_id: int):
     return None
 
 
-@dp.message(F.text, ban_username())
+@dp.message(F.text, ban_username(), F.from_user.id.in_(ADMINS))
 async def ban_username_command(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
-        return
     s = message.text[5:]
     await delete_row_in_average(await get_id_by_username(s))
     result = await get_ban(await get_id_by_username(s))
@@ -200,11 +197,8 @@ async def ban_username_command(message: Message):
         await message.answer(text=f'Пользователь <i>@{s}</i> был успешно забанен! Нахуй его!')
 
 
-@dp.message(F.text, unban_username())
+@dp.message(F.text, unban_username(), F.from_user.id.in_(ADMINS))
 async def unban_username_command(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
-        return
     s = message.text[7:]
     result = await get_unban(await get_id_by_username(s))
     if result == 0:
@@ -229,11 +223,8 @@ async def add_birthday_func(message: Message):
         await message.answer("Не удалось извлечь имя пользователя и дату из сообщения.")
 
 
-@dp.message(F.text, clear_states_username())
+@dp.message(F.text, clear_states_username(), F.from_user.id.in_(ROOT_ADMIN))
 async def clear_state_username(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
-        return
     s = message.text[4:]
     try:
         await add_current_state(id=await get_id_by_username(s), num=0)
@@ -242,11 +233,8 @@ async def clear_state_username(message: Message):
         await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
 
 
-@dp.message(F.text, change_queue_username())
+@dp.message(F.text, change_queue_username(), F.from_user.id.in_(ROOT_ADMIN))
 async def change_queue_command(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
-        return
     s = message.text[4:]
     try:
         username = s[:s.find('\n')]
@@ -258,11 +246,8 @@ async def change_queue_command(message: Message):
         await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
 
 
-@dp.message(F.text, change_average_filter())
+@dp.message(F.text, change_average_filter(), F.from_user.id.in_(ROOT_ADMIN))
 async def change_average_command(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!', reply_markup=await get_keyboard(message.from_user.id))
-        return
     pattern = r'/(\w+)_([\w\d]+)_([\d]+)_([\d]+)'
     match = re.match(pattern, message.text)
 
@@ -310,15 +295,20 @@ async def pepe_command(message: Message):
     await message.answer(text=random.choice(replicas['pepe']), reply_markup=await get_keyboard(message.from_user.id))
 
 
+# PHASALO ON
 @dp.message(Command(commands='phasalov'))
 async def phasalov_command(message: Message):
-    n = random.randint(1, 100)
-    txt = (f"```C\nfor (int i = 0; i < k; i++) {'{'}\n"
-           f"    if (n == {n}) {'{'}\n"
-           f"        n = {n};\n"
-           f"    {'}'}\n"
-           f"{'}'}```")
+#   <-| ----------------- -<phasalo>- ------------------ |->
+    n = random.randint(1, 100)                     # |
+    txt = (f"```C\nfor (int i = 0; i < k; i++) {'{'}\n"  # |
+           f"    if (n == {n}) {'{'}\n"                  # | <=| PHASALO<|||
+           f"        n = {n};\n"                         # |
+           f"    {'}'}\n"                                # |
+           f"{'}'}```")                                  # |
+#   <-| ----------------- -<phasalo>- ------------------ |->
+
     await message.answer(text=txt, reply_markup=await get_keyboard(message.from_user.id), parse_mode="MarkdownV2")
+# PHASALO OFF
 
 
 @dp.callback_query(F.data == 'more1')
@@ -346,39 +336,33 @@ async def send_tier_and_delete(message: Message, state: FSMContext):
 #     pass
 
 
-@dp.message(Command(commands='delete_tier_list'))
+@dp.message(Command(commands='delete_tier_list'), F.from_user.id.in_(ROOT_ADMIN))
 async def send_tier_and_delete(message: Message, state: FSMContext):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-    else:
-        array = [[InlineKeyboardButton(text='Удалить! Я КОНЧ! 😈',callback_data='ya_gay_delete_tier_db'),
-                  InlineKeyboardButton(text='Не удалять ❌',callback_data='not_delete')]]
-        await message.answer(
-            text='<b>ВСЯ БД БУДЕТ СТЕРТА! Ты уверен?</b>\n<span class="tg-spoiler">Админ может дать пизды!</span>',
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=array))
+    array = [[InlineKeyboardButton(text='Удалить! Я КОНЧ! 😈', callback_data='ya_gay_delete_tier_db'),
+              InlineKeyboardButton(text='Не удалять ❌', callback_data='not_delete')]]
+    await message.answer(
+        text='<b>ВСЯ БД БУДЕТ СТЕРТА! Ты уверен?</b>\n<span class="tg-spoiler">Админ может дать пизды!</span>',
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=array))
 
 
-@dp.message(Command(commands='upd_file'))
+@dp.message(Command(commands='upd_file'), F.from_user.id.in_(ROOT_ADMIN))
 async def update_replicas_file(message: Message, state: FSMContext):
     global replicas
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
+    if message.document and message.document.mime_type == 'text/plain':
+        f = await bot.get_file(message.document.file_id)
+        f_path = f.file_path
+        await bot.download_file(file_path=f_path, destination=f'{os.path.dirname(__file__)}/DB/replicas2.txt')
+        try:
+            with open(f'{os.path.dirname(__file__)}/DB/replicas2.txt', 'r', encoding='utf-8') as file:
+                replicas = json.load(file)
+            shutil.copyfile(f'{os.path.dirname(__file__)}/DB/replicas2.txt', f'{os.path.dirname(__file__)}/DB/replicas.txt')
+            os.remove(f'{os.path.dirname(__file__)}/DB/replicas2.txt')
+            await message.answer('Новый файл сохранен')
+        except Exception as e:
+            await bot.send_message(chat_id=972753303,
+                                   text=f'Произошла ошибка при открытии файла <i>"replicas.txt"</i>\n{e}')
     else:
-        if message.document and message.document.mime_type == 'text/plain':
-            f = await bot.get_file(message.document.file_id)
-            f_path = f.file_path
-            await bot.download_file(file_path=f_path, destination=f'{os.path.dirname(__file__)}/DB/replicas2.txt')
-            try:
-                with open(f'{os.path.dirname(__file__)}/DB/replicas2.txt', 'r', encoding='utf-8') as file:
-                    replicas = json.load(file)
-                shutil.copyfile(f'{os.path.dirname(__file__)}/DB/replicas2.txt', f'{os.path.dirname(__file__)}/DB/replicas.txt')
-                os.remove(f'{os.path.dirname(__file__)}/DB/replicas2.txt')
-                await message.answer('Новый файл сохранен')
-            except Exception as e:
-                await bot.send_message(chat_id=972753303,
-                                       text=f'Произошла ошибка при открытии файла <i>"replicas.txt"</i>\n{e}')
-        else:
-            await message.answer('❗️Ты забыл прикрепить файл или прикрепил файл не того типа')
+        await message.answer('❗️Ты забыл прикрепить файл или прикрепил файл не того типа')
 
 
 @dp.callback_query(F.data.in_(['ya_gay_delete_tier_db',
@@ -422,11 +406,8 @@ async def send_dm(message: Message, state: FSMContext):
         await state.set_state(FSMFillForm.sendDM)
 
 
-@dp.message(F.text, check_username())
+@dp.message(F.text, check_username(), F.from_user.id.in_(ROOT_ADMIN))
 async def del_username(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-        return
     s = message.text[5:]
     result = await delete_row(s)
     if result == 0:
@@ -1809,40 +1790,31 @@ async def send_clear_users_db(message: Message):
         await message.answer(text=f'Произошла ошибка!\n{e}')
 
 
-@dp.message(Command(commands='clear_queue'), F.from_user.id.in_(incels))
+@dp.message(Command(commands='clear_queue'), F.from_user.id.in_(ROOT_ADMIN))
 async def clear_queue(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-    else:
-        try:
-            for user in await get_users():
-                await delete_from_queue(id=user)
-                await add_current_state(id=user, num=0)
-            await message.answer(text='Очереди очищены 🫡')
-        except Exception as e:
-            await message.answer(text=f'Произошла ошибка! Код 10\n{e}')
+    try:
+        for user in await get_users():
+            await delete_from_queue(id=user)
+            await add_current_state(id=user, num=0)
+        await message.answer(text='Очереди очищены 🫡')
+    except Exception as e:
+        await message.answer(text=f'Произошла ошибка! Код 10\n{e}')
 
 
-@dp.message(Command(commands='upd_groupnames'), F.from_user.id.in_(incels))
+@dp.message(Command(commands='upd_groupnames'), F.from_user.id.in_(ADMINS))
 async def upd_groupnames(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-    else:
-        await update_groupnames()
-        await message.answer('Названия групп обновлены!')
+    await update_groupnames()
+    await message.answer('Названия групп обновлены!')
 
 
-@dp.message(Command(commands='clear_states'), F.from_user.id.in_(incels))
+@dp.message(Command(commands='clear_states'), F.from_user.id.in_(ROOT_ADMIN))
 async def clear_state(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-    else:
-        try:
-            for user in await get_users():
-                await add_current_state(id=user, num=0)
-            await message.answer(text='Состояния очищены 🫡')
-        except Exception as e:
-            await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
+    try:
+        for user in await get_users():
+            await add_current_state(id=user, num=0)
+        await message.answer(text='Состояния очищены 🫡')
+    except Exception as e:
+        await message.answer(text=f'Произошла ошибка! Код 11\n{e}')
 
 
 @dp.message(Command(commands='backup'), F.from_user.id.in_(incels))
@@ -2026,36 +1998,27 @@ async def get_all_commands(message: Message):
     await message.answer(text=txt, reply_markup=await get_keyboard(message.from_user.id))
 
 
-@dp.message(Command(commands='get_weekly_db'))
+@dp.message(Command(commands='get_weekly_db'), F.from_user.id.in_(ROOT_ADMIN))
 async def send_weekly_db(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-    else:
-        db = await get_weekly_db_info()
-        if db is None:
-            await message.answer(text='БД пуста')
-            return
-        txt = str(db)
-        for i in range((len(txt) + 4096) // 4096):
-            await message.answer(text=txt[i * 4096:(i + 1) * 4096])
+    db = await get_weekly_db_info()
+    if db is None:
+        await message.answer(text='БД пуста')
+        return
+    txt = str(db)
+    for i in range((len(txt) + 4096) // 4096):
+        await message.answer(text=txt[i * 4096:(i + 1) * 4096])
 
 
-@dp.message(Command(commands='weekly_off'))
+@dp.message(Command(commands='weekly_off'), F.from_user.id.in_(ROOT_ADMIN))
 async def weekly_cancel_func(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-    else:
-        await weekly_cancel(message.from_user.id)
-        await message.answer(text='Еженедельная рассылка тир листа отключена')
+    await weekly_cancel(message.from_user.id)
+    await message.answer(text='Еженедельная рассылка тир листа отключена')
 
 
-@dp.message(Command(commands='weekly_on'))
+@dp.message(Command(commands='weekly_on'), F.from_user.id.in_(ROOT_ADMIN))
 async def send_users_db_func(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='иди нахуй')
-    else:
-        await weekly_resume(message.from_user.id)
-        await message.answer(text='Еженедельная рассылка тир листа возобновлена')
+    await weekly_resume(message.from_user.id)
+    await message.answer(text='Еженедельная рассылка тир листа возобновлена')
 
 
 @dp.message(Command(commands='get_ban'))
@@ -2065,48 +2028,42 @@ async def ban_user(message: Message, state: FSMContext):
     await state.set_state(FSMFillForm.banned)
 
 
-@dp.message(Command(commands='get_sluts_db'))
+@dp.message(Command(commands='get_sluts_db'), F.from_user.id.in_(ROOT_ADMIN))
 async def send_sluts_db(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-    else:
-        if await get_sluts_db() is None:
-            await message.answer(text='БД пуста')
-            return
-        txt = map(str, await get_sluts_db())
-        txt = '\n'.join(txt)
-        for i in range((len(txt) + 4096) // 4096):
-            await message.answer(text=txt[i * 4096:(i + 1) * 4096])
+    if await get_sluts_db() is None:
+        await message.answer(text='БД пуста')
+        return
+    txt = map(str, await get_sluts_db())
+    txt = '\n'.join(txt)
+    for i in range((len(txt) + 4096) // 4096):
+        await message.answer(text=txt[i * 4096:(i + 1) * 4096])
 
 
-@dp.message(Command(commands='get_latest_sluts'))
+@dp.message(Command(commands='get_latest_sluts'), F.from_user.id.in_(ADMINS))
 async def send_latest_sluts_db(message: Message):
-    if message.from_user.id != 972753303:
-        await message.answer(text='Иди нахуй!')
-    else:
-        sluts_list = await get_sluts_db()
-        if sluts_list is None:
-            await message.answer(text='БД пуста')
-            return
-        sluts_list = sluts_list[-5:]
-        sluts_last3 = []
-        txt = ''
-        for i in iter(sluts_list):
-            if i[2] is None:
-                rates = 'Нет оценок'
-            else:
-                rates = '<b>Оценки:</b><blockquote>'
-                for key, value in json.loads(i[2]).items():
-                    rates += f'<i>{key}</i> – {value}, '
-                rates = rates[:-2] + '</blockquote>'
-            if i[1] is None or len(i[1]) == 0 :
-                caption = ''
-            else:
-                caption = f'"<i>{i[1]}</i>" | '
-            name = i[-1]
-            name = '@' + name if name[0] != '👥' else f'👥 <a href="vk.com/{name[2:]}">{name[:name.find("?")][2:]}</a>'
-            txt += f'№ {i[0]} Автор: {name} | {caption}{rates}\n'
-        await message.answer(text=txt, disable_web_page_preview=True)
+    sluts_list = await get_sluts_db()
+    if sluts_list is None:
+        await message.answer(text='БД пуста')
+        return
+    sluts_list = sluts_list[-5:]
+    sluts_last3 = []
+    txt = ''
+    for i in iter(sluts_list):
+        if i[2] is None:
+            rates = 'Нет оценок'
+        else:
+            rates = '<b>Оценки:</b><blockquote>'
+            for key, value in json.loads(i[2]).items():
+                rates += f'<i>{key}</i> – {value}, '
+            rates = rates[:-2] + '</blockquote>'
+        if i[1] is None or len(i[1]) == 0 :
+            caption = ''
+        else:
+            caption = f'"<i>{i[1]}</i>" | '
+        name = i[-1]
+        name = '@' + name if name[0] != '👥' else f'👥 <a href="vk.com/{name[2:]}">{name[:name.find("?")][2:]}</a>'
+        txt += f'№ {i[0]} Автор: {name} | {caption}{rates}\n'
+    await message.answer(text=txt, disable_web_page_preview=True)
 
 
 @dp.message(F.content_type.in_({ContentType.PHOTO, ContentType.TEXT}), StateFilter(FSMFillForm.sendQuote))
