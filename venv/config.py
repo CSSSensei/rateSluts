@@ -84,7 +84,7 @@ emoji_lol = ['🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '�
 emoji_banned = '⛔❗🤯😳❌⭕🛑📛🚫💢🚷📵🔴🟥💣🗿🐓🙊🙉🙈🐷🫵🥲🙁😕😟😔😞😧😦😯🙄😵💀🚨😐'
 dice_points = {'🎲': 6, '🎯': 6, '🎳': 6, '🏀': 4, '⚽': 3, '🎰': 64}
 replicas = {}
-with open(f'{os.path.dirname(__file__)}/DB/replicas.txt', 'r', encoding='utf-8') as file:
+with open(f'{os.path.dirname(__file__)}/DB/replicas.json', 'r', encoding='utf-8') as file:
     replicas = json.load(file)
 emoji = {
     0: '🤢',

@@ -28,7 +28,6 @@
 #       |_| |_| |_| \___|| .__/ |_| |_||_|   |_| \___||_||___/
 #                        | |
 #                        |_|
-import asyncio
 
 from config import *
 
@@ -348,19 +347,19 @@ async def send_tier_and_delete(message: Message, state: FSMContext):
 @dp.message(Command(commands='upd_file'), F.from_user.id.in_(ROOT_ADMIN))
 async def update_replicas_file(message: Message, state: FSMContext):
     global replicas
-    if message.document and message.document.mime_type == 'text/plain':
+    if message.document and message.document.mime_type == 'application/json':
         f = await bot.get_file(message.document.file_id)
         f_path = f.file_path
-        await bot.download_file(file_path=f_path, destination=f'{os.path.dirname(__file__)}/DB/replicas2.txt')
+        await bot.download_file(file_path=f_path, destination=f'{os.path.dirname(__file__)}/DB/replicas2.json')
         try:
-            with open(f'{os.path.dirname(__file__)}/DB/replicas2.txt', 'r', encoding='utf-8') as file:
+            with open(f'{os.path.dirname(__file__)}/DB/replicas2.json', 'r', encoding='utf-8') as file:
                 replicas = json.load(file)
-            shutil.copyfile(f'{os.path.dirname(__file__)}/DB/replicas2.txt', f'{os.path.dirname(__file__)}/DB/replicas.txt')
-            os.remove(f'{os.path.dirname(__file__)}/DB/replicas2.txt')
+            shutil.copyfile(f'{os.path.dirname(__file__)}/DB/replicas2.json', f'{os.path.dirname(__file__)}/DB/replicas.json')
+            os.remove(f'{os.path.dirname(__file__)}/DB/replicas2.json')
             await message.answer('Новый файл сохранен')
         except Exception as e:
             await bot.send_message(chat_id=972753303,
-                                   text=f'Произошла ошибка при открытии файла <i>"replicas.txt"</i>\n{e}')
+                                   text=f'Произошла ошибка при открытии файла <i>"replicas.json"</i>\n{e}')
     else:
         await message.answer('❗️Ты забыл прикрепить файл или прикрепил файл не того типа')
 
